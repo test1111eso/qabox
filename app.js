@@ -1049,8 +1049,8 @@ function renderCharts(dailyData, statusData) {
 
 // Utility to prevent XSS
 function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return unsafe
+    if (unsafe === null || unsafe === undefined || unsafe === '') return '';
+    return String(unsafe)
          .replace(/&/g, "&amp;")
          .replace(/</g, "&lt;")
          .replace(/>/g, "&gt;")
