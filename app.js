@@ -103,7 +103,12 @@ async function handleAuthSubmit(e) {
                 body: JSON.stringify({ username, password, display_name: displayName })
             });
             const regData = await regRes.json();
-            if (!regRes.ok) throw new Error(regData.error || '註冊失敗');
+            if (!regRes.ok) {
+                if (regData.error === 'Username may already exist') {
+                    throw new Error('此帳號已註冊，請勿重複申請！');
+                }
+                throw new Error(regData.error || '註冊失敗');
+            }
         }
         
         const loginRes = await fetch(`${API_BASE}/api/login`, {
@@ -112,7 +117,18 @@ async function handleAuthSubmit(e) {
             body: JSON.stringify({ username, password })
         });
         const loginData = await loginRes.json();
-        if (!loginRes.ok) throw new Error(loginData.error || '登入失敗');
+        
+        if (!loginRes.ok) {
+            // 如果是在註冊模式下，因為未啟用 (403) 導致自動登入失敗
+            if (loginRes.status === 403 && isRegisterMode) {
+                toggleAuthMode(); // 切換回登入模式
+                document.getElementById('auth-username').value = username;
+                document.getElementById('auth-password').value = '';
+                showToast('註冊成功！請等待管理員審核啟用後方可登入。');
+                return;
+            }
+            throw new Error(loginData.error || '登入失敗');
+        }
         
         localStorage.setItem('qa_session_token', loginData.token);
         localStorage.setItem('qa_display_name', loginData.display_name);
