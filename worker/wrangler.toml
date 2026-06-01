@@ -1,0 +1,10 @@
+name = "qa-backend-api"
+main = "src/index.js"
+compatibility_date = "2024-05-01"
+
+account_id = "f3c77bdb0b7c8dc5cbc01977437fa7c3"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "qabox"
+database_id = "46ea2bc8-2fb3-4ade-90d0-0277d790a66f"

@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA 管理系統</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#10b981',
+                        dark: '#1f2937'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-['Inter'] antialiased">
+    <div id="main-app" class="hidden">
+    <!-- Navigation -->
+    <nav class="bg-dark text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <!-- Icon placeholder -->
+                    <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-bold text-xl tracking-wide">QA 系統</span>
+                </div>
+                <div class="flex gap-4">
+                    <button onclick="switchView('dashboard')"
+                        class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition active"
+                        id="nav-dashboard">儀表板</button>
+                    <button onclick="switchView('reports')"
+                        class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
+                        id="nav-reports">測試報告</button>
+                    <button onclick="switchView('documents')"
+                        class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
+                        id="nav-documents">文件管理</button>
+                    <div class="flex items-center gap-2 ml-4 border-l border-gray-600 pl-4">
+                        <span id="nav-user-name" class="text-sm font-medium text-gray-300"></span>
+                        <button onclick="handleLogout()" class="text-sm text-red-400 hover:text-red-300 transition font-medium">登出</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="main-content">
+
+        <!-- View: Dashboard -->
+        <div id="view-dashboard" class="view-section fade-in">
+            <h1 class="text-3xl font-bold mb-6 text-gray-900">總覽儀表板</h1>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <!-- Summary Cards -->
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-sm font-medium text-gray-500 mb-1">總測試報告數</h3>
+                    <p class="text-3xl font-bold text-dark" id="stat-total">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-sm font-medium text-gray-500 mb-1">今日新增報告</h3>
+                    <p class="text-3xl font-bold text-primary" id="stat-today">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-sm font-medium text-gray-500 mb-1">阻礙中 (Blocked)</h3>
+                    <p class="text-3xl font-bold text-red-500" id="stat-blocked">0</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-800">近 7 日測試趨勢</h3>
+                    <div class="relative h-64 w-full">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                    <h3 class="text-lg font-semibold mb-4 text-gray-800">測試狀態分佈</h3>
+                    <div class="relative h-64 w-full flex justify-center">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Reports -->
+        <div id="view-reports" class="view-section hidden fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-900">測試報告</h1>
+                <button onclick="openModal()"
+                    class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    新增報告
+                </button>
+            </div>
+
+            <!-- Filters -->
+            <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mb-6 flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">依測試員篩選</label>
+                    <input type="text" id="filter-tester"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary w-48"
+                        placeholder="輸入姓名...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">依日期篩選</label>
+                    <input type="date" id="filter-date"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary">
+                </div>
+                <button onclick="fetchReports()"
+                    class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-md text-sm font-medium transition">
+                    搜尋
+                </button>
+                <button onclick="clearFilters()"
+                    class="text-sm text-gray-500 hover:text-gray-700 underline ml-2">清除條件</button>
+            </div>
+
+            <!-- Reports Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    專案</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    測試員</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    日期</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    狀態</th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Bug 連結</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="reports-table-body">
+                            <!-- Data populated by JS -->
+                            <tr>
+                                <td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Documents -->
+        <div id="view-documents" class="view-section hidden fade-in">
+            <h1 class="text-3xl font-bold mb-6 text-gray-900">文件管理</h1>
+            <p class="text-gray-600 mb-6">點擊連結前往相對應的文件說明。</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="documents-grid">
+                <!-- Data populated by JS -->
+                <div class="col-span-full text-center py-8 text-gray-500">載入中...</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for New Report with Generator -->
+    <div id="report-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-900">撰寫測試報告</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="flex flex-col lg:flex-row flex-grow overflow-hidden">
+                <!-- Left: Form -->
+                <div class="w-full lg:w-1/2 p-6 overflow-y-auto border-r border-gray-100">
+
+                    <div class="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                        <label class="block text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            第一步：智慧解析工單
+                        </label>
+                        <textarea id="ticket-input" rows="8" placeholder="在此貼上工單內容（如：軟體版本、測試環境...）"
+                            class="w-full border border-blue-200 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary text-sm shadow-inner"></textarea>
+                    </div>
+
+
+
+                    <form id="report-form" class="space-y-4">
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">測試人員 *</label>
+                                <input type="text" id="form-tester" required readonly
+                                    class="w-full border border-gray-300 bg-gray-100 text-gray-600 rounded-lg px-3 py-2 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">工程人員</label>
+                                <input type="text" id="form-developer"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">測試日期</label>
+                                <input type="date" id="form-date"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">專案名稱 <span
+                                    class="text-red-500">*</span></label>
+                            <input type="text" id="form-project" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-sm font-medium text-gray-700">工單說明</label>
+                            </div>
+                            <textarea id="form-steps" rows="4" oninput="clearTicketNotesPresets(); updateGeneratedResult();" placeholder="在此輸入工單說明內容..."
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">母單</label>
+                                <input type="text" id="form-parent-ticket"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"
+                                    placeholder="輸入母單...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">子單</label>
+                                <input type="text" id="form-sub-ticket"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"
+                                    placeholder="輸入子單...">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">軟體版本</label>
+                            <textarea id="form-version" rows="2" placeholder="例如：前端: stg-xxx&#10;後端: qa-yyy"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">測試環境 (網址) <span
+                                        class="text-red-500">*</span></label>
+                                <div class="flex flex-wrap gap-1.5 mb-2">
+                                    <button type="button" onclick="setEnv('https://www.1111.com.tw/')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">主網</button>
+                                    <button type="button" onclick="setEnv('https://www-qa.1111.com.tw/')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">QA</button>
+                                    <button type="button"
+                                        onclick="setEnv('https://www-stg.1111.com.tw/')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">STG</button>
+                                    <button type="button" onclick="setEnv('https://www-iis-qa.1111.com.tw/')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">IIS-QA</button>
+                                    <button type="button" onclick="setEnv('https://www-iis-stg.1111.com.tw/')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">IIS-STG</button>
+                                    <button type="button" onclick="setEnv('https://recruit.1111.com.tw/login.aspx')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">招募</button>
+                                    <button type="button" onclick="setEnv('https://recruit-qa.1111.com.tw/login.aspx')"
+                                        class="text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition">招募QA</button>
+                                </div>
+                                <textarea id="form-env" rows="2" required
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"
+                                    placeholder="點擊上方快速帶入，或在此自行輸入網址（可多行）"></textarea>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="block text-sm font-medium text-gray-700">測試裝置</label>
+                                    <button type="button" onclick="getBrowserVersion()"
+                                        class="text-xs text-primary hover:text-blue-700 font-medium flex items-center gap-1 transition bg-blue-50 px-2 py-1 rounded"
+                                        title="帶入您目前正在使用的瀏覽器版本">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9">
+                                            </path>
+                                        </svg>
+                                        本機瀏覽器
+                                    </button>
+                                </div>
+                                <input type="text" id="form-device" placeholder="例如：Chrome 148.0..."
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary mb-2">
+                                <div class="flex flex-col gap-2 bg-gray-50 p-2 rounded border border-gray-200">
+                                    <div class="flex items-center gap-2">
+                                        <label
+                                            class="flex items-center gap-1 text-sm font-medium text-gray-700 cursor-pointer min-w-[70px]">
+                                            <input type="checkbox" id="chk-ipad"
+                                                class="rounded text-primary focus:ring-primary"> iPad
+                                        </label>
+                                        <input type="text" id="form-ipad-version" placeholder="iPad 版本..."
+                                            class="border border-gray-300 rounded px-2 py-1 text-xs w-full focus:ring-primary focus:border-primary">
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <label
+                                            class="flex items-center gap-1 text-sm font-medium text-gray-700 cursor-pointer min-w-[70px]">
+                                            <input type="checkbox" id="chk-iphone"
+                                                class="rounded text-primary focus:ring-primary"> iPhone
+                                        </label>
+                                        <input type="text" id="form-iphone-version" placeholder="iPhone 版本..."
+                                            class="border border-gray-300 rounded px-2 py-1 text-xs w-full focus:ring-primary focus:border-primary">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-6 bg-orange-50 border border-orange-100 p-4 rounded-xl">
+                            <label class="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" class="rounded text-orange-600 focus:ring-orange-500 cursor-pointer" onchange="document.getElementById('grafana-content').classList.toggle('hidden', !this.checked)">
+                                <span class="text-sm font-bold text-orange-800 flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                        </path>
+                                    </svg>
+                                    第二步：貼上 Grafana 版號 (選填)
+                                </span>
+                            </label>
+                            <div id="grafana-content" class="hidden mt-3">
+                                <p class="text-xs text-orange-600 mb-2">在此貼上複製的版號，系統會自動比對並填入。</p>
+                                <textarea id="grafana-input" rows="3"
+                                    class="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500 bg-white mb-2"
+                                    placeholder="在此貼上 Grafana 複製的文字..."></textarea>
+
+                                <div class="flex gap-1.5 flex-wrap">
+                                    <a href="https://grafana.web.internal/d/5e23960b-1627-402b-98a0-f125ef6d06bf/deployment-stats?orgId=1&from=now-5m&to=now&timezone=browser&var-Filters=&var-namespace=job-finder"
+                                        target="_blank"
+                                        class="text-xs bg-white text-orange-600 border border-orange-200 px-3 py-1.5 rounded hover:bg-orange-100 transition whitespace-nowrap shadow-sm font-medium">求職連結
+                                        ↗</a>
+                                    <a href="https://grafana.web.internal/d/b08307e8-6ed2-4b8d-9e3a-d254a2f06894/deployment-stats?orgId=1&from=now-5m&to=now&timezone=browser&var-Filters=&var-namespace=recruit"
+                                        target="_blank"
+                                        class="text-xs bg-white text-orange-600 border border-orange-200 px-3 py-1.5 rounded hover:bg-orange-100 transition whitespace-nowrap shadow-sm font-medium">求才連結
+                                        ↗</a>
+                                    <a href="https://grafana.web.internal/d/b08307e8-6ed2-4b8d-9e3a-d254a2f06895/deployment-stats?orgId=1&from=now-5m&to=now&timezone=browser&var-Filters=&var-namespace=event"
+                                        target="_blank"
+                                        class="text-xs bg-white text-orange-600 border border-orange-200 px-3 py-1.5 rounded hover:bg-orange-100 transition whitespace-nowrap shadow-sm font-medium">活動連結
+                                        ↗</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-sm font-medium text-gray-700">測試案例 (網址)</label>
+                                <div class="flex gap-3">
+                                    <label
+                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                        <input type="radio" name="tc-preset" value="雲端位址(網址)" onchange="setTestCase('https://drive.google.com/drive/u/0/folders/1W2YL25vRaA1ZhjzHDa-N6flzi4TVmvwN')"
+                                            class="text-primary focus:ring-primary"> 雲端位址(網址)
+                                    </label>
+                                    <label
+                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                        <input type="radio" name="tc-preset" value="不出案例" onchange="setTestCase('不出案例')"
+                                            class="text-primary focus:ring-primary"> 不出案例
+                                    </label>
+                                </div>
+                            </div>
+                            <input type="text" id="form-test-case" oninput="clearTcPresets(); updateGeneratedResult();"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"
+                                placeholder="例如：https://ua.1111.com.tw/Team/Task/Detail?k=7555">
+                        </div>
+
+                        <div class="bg-green-50 border border-green-100 p-4 rounded-xl mb-2">
+                            <label class="block text-sm font-bold text-green-800 mb-2 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                                </svg>
+                                第三步：測試步驟
+                            </label>
+                            <textarea id="form-test-steps" rows="4" placeholder="在此輸入測試步驟..."
+                                class="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500 bg-white shadow-inner"></textarea>
+                        </div>
+
+
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">風險評估</label>
+                                <select id="form-risk"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                                    <option value="低">低</option>
+                                    <option value="中">中</option>
+                                    <option value="高">高</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">通過率</label>
+                                <select id="form-pass-rate"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                                    <option value="100%">100%</option>
+                                    <option value="80%">80%</option>
+                                    <option value="60%">60%</option>
+                                    <option value="40%">40%</option>
+                                    <option value="不通過">不通過</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="block text-sm font-medium text-gray-700">備註</label>
+                                <div class="flex gap-3">
+                                    <label
+                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                        <input type="radio" name="notes-preset" value="by pass"
+                                            onchange="setNotes('by pass')" class="text-primary focus:ring-primary"> by
+                                        pass
+                                    </label>
+                                    <label
+                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                        <input type="radio" name="notes-preset" value="調整樣式，不出案例"
+                                            onchange="setNotes('調整樣式，不出案例')" class="text-primary focus:ring-primary">
+                                        調整樣式，不出案例
+                                    </label>
+                                </div>
+                            </div>
+                            <textarea id="form-notes" rows="2" oninput="clearNotesPresets(); updateGeneratedResult();"
+                                placeholder="輸入備註資訊..."
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">狀態 <span
+                                    class="text-red-500">*</span></label>
+                            <select id="form-status" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                                <option value="Pass">Pass (通過)</option>
+                                <option value="Fail">Fail (失敗)</option>
+                                <option value="Blocked">Blocked (阻礙)</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Right: Generator Preview -->
+                <div class="w-full lg:w-1/2 p-6 flex flex-col bg-gray-50">
+                    <div class="flex justify-between items-center mb-3">
+                        <h4 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            回報內容預覽 (送出時將自動存入備註)
+                        </h4>
+                        <div class="flex gap-2">
+                            <button onclick="clearGeneratorForm()"
+                                class="text-xs bg-white border border-red-200 hover:bg-red-50 text-red-600 px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1 shadow-sm">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                                    </path>
+                                </svg>
+                                清空內容
+                            </button>
+                            <button onclick="copyGeneratedResult()"
+                                class="text-xs bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md font-medium transition flex items-center gap-1 shadow-sm">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3">
+                                    </path>
+                                </svg>
+                                複製內容
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="generated-result" readonly
+                        class="flex-grow w-full border border-gray-200 rounded-lg p-4 bg-white text-gray-800 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary shadow-inner min-h-[300px] leading-relaxed"></textarea>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                <button onclick="closeModal()"
+                    class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition">取消</button>
+                <button onclick="submitReport(event)"
+                    class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 font-medium shadow-sm transition flex items-center gap-2">
+                    <span id="submit-text">儲存報告</span>
+                    <svg id="submit-spinner" class="animate-spin h-4 w-4 text-white hidden"
+                        xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast"
+        class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-50">
+        <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span id="toast-message">操作成功</span>
+        </div>
+    </div>
+    </div> <!-- End main-app -->
+
+    <!-- Auth View Overlay -->
+    <div id="auth-view" class="fixed inset-0 z-[100] bg-gray-50 flex flex-col items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl mb-4 text-primary">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900" id="auth-title">登入系統</h2>
+                <p class="text-sm text-gray-500 mt-2" id="auth-subtitle">歡迎回來，請登入您的帳號</p>
+            </div>
+            
+            <form id="auth-form" class="space-y-5" onsubmit="handleAuthSubmit(event)">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">帳號</label>
+                    <input type="text" id="auth-username" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary transition" placeholder="請輸入帳號">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密碼</label>
+                    <input type="password" id="auth-password" required class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary transition" placeholder="請輸入密碼">
+                </div>
+                <div id="auth-name-group" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">顯示名稱 (你的姓名)</label>
+                    <input type="text" id="auth-display-name" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary transition" placeholder="例如：王小明">
+                </div>
+                
+                <div id="auth-error" class="hidden text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100"></div>
+
+                <button type="submit" id="auth-submit-btn" class="w-full bg-primary text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition shadow-sm">
+                    登入
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center text-sm text-gray-500">
+                <span id="auth-toggle-text">還沒有帳號嗎？</span>
+                <button type="button" onclick="toggleAuthMode()" class="text-primary font-bold hover:underline ml-1" id="auth-toggle-btn">點此註冊</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
