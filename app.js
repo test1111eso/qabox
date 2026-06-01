@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('form-date')?.addEventListener('change', (e) => {
         const reportId = document.getElementById('form-report-id').value;
         if (!reportId) {
-            document.getElementById('form-case-no').value = generateNextCaseNo(e.target.value);
+            updateNextCaseNo(e.target.value);
         }
     });
 });
@@ -193,7 +193,7 @@ function openModal() {
     
     // 自動預填案件編號 (格式: YYYYMMDD-01)
     const todayStr = document.getElementById('form-date').value;
-    document.getElementById('form-case-no').value = generateNextCaseNo(todayStr);
+    updateNextCaseNo(todayStr);
     
     // 載入記住的測試員
     const savedTester = localStorage.getItem('qa_display_name');
@@ -205,10 +205,9 @@ function openModal() {
     updateGeneratedResult();
 }
 
-// 根據日期自動計算下一個案件編號 (例如：20260601-01, 20260601-02...)
-function generateNextCaseNo(dateStr) {
+// 根據日期自動計算下一個案件編號 (備用方案，在 API 失敗時發揮防呆作用)
+function fallbackNextCaseNo(dateStr) {
     if (!dateStr) return '';
-    // 去除日期連字號: 20260601
     const prefix = dateStr.replace(/-/g, '');
     
     let maxSeq = 0;
@@ -232,6 +231,35 @@ function generateNextCaseNo(dateStr) {
     const nextSeq = maxSeq + 1;
     const nextSeqStr = nextSeq.toString().padStart(2, '0');
     return `${prefix}-${nextSeqStr}`;
+}
+
+// 非同步從後端取得最新延續案件編號，並填入唯讀的案件編號欄位中
+async function updateNextCaseNo(dateStr) {
+    const caseNoEl = document.getElementById('form-case-no');
+    if (!caseNoEl) return;
+    
+    if (!dateStr) {
+        caseNoEl.value = '';
+        updateGeneratedResult();
+        return;
+    }
+    
+    caseNoEl.value = '計算中...';
+    updateGeneratedResult();
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/next-case-no?date=${encodeURIComponent(dateStr)}`);
+        if (!res.ok) throw new Error('API 回傳異常');
+        const data = await res.json();
+        
+        caseNoEl.value = data.nextCaseNo || '';
+        updateGeneratedResult();
+    } catch (err) {
+        console.error(err);
+        // 若 API 發生故障，退回至備用方案，避免用戶無法送出報告
+        caseNoEl.value = fallbackNextCaseNo(dateStr);
+        updateGeneratedResult();
+    }
 }
 
 function closeModal() {
@@ -439,7 +467,8 @@ function copyReportNotes(id) {
     document.getElementById('submit-text').textContent = '儲存報告';
 
     // 填入基本與獨立欄位
-    document.getElementById('form-case-no').value = generateNextCaseNo(report.test_date);
+    document.getElementById('form-case-no').value = '計算中...';
+    updateNextCaseNo(report.test_date);
     document.getElementById('form-project').value = report.project_name || '';
     document.getElementById('form-tester').value = report.tester_name || '';
     document.getElementById('form-date').value = report.test_date || '';
