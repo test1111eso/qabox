@@ -1198,9 +1198,12 @@ async function fetchUsers() {
             const currentUser = localStorage.getItem('qa_display_name');
             // 若為自己，則不顯示關閉按鈕（安全措施）
             const isSelf = user.username === '20200715' || user.display_name === currentUser;
-            const actionButton = isSelf 
-                ? '<span class="text-gray-400 text-xs italic">管理員本人 (無法停用)</span>' 
-                : `<button onclick="toggleUserActive(${user.id}, ${user.is_active})" class="${buttonClass} transition">${buttonText}</button>`;
+            
+            const statusAction = isSelf 
+                ? '<span class="text-gray-400 text-xs italic mr-3">無法停用</span>' 
+                : `<button onclick="toggleUserActive(${user.id}, ${user.is_active})" class="${buttonClass} transition mr-3">${buttonText}</button>`;
+                
+            const resetAction = `<button onclick="resetUserPassword(${user.id}, '${escapeHtml(user.display_name)}')" class="text-primary hover:text-blue-700 font-semibold transition">重設密碼 🔑</button>`;
 
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(user.username)}</td>
@@ -1213,7 +1216,8 @@ async function fetchUsers() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(user.created_at || '-')}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold">${isActiveText}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    ${actionButton}
+                    ${statusAction}
+                    ${resetAction}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -1245,6 +1249,33 @@ async function toggleUserActive(userId, currentStatus) {
         
         showToast('測試員狀態已成功變更！');
         fetchUsers(); // 刷新使用者列表
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
+}
+
+async function resetUserPassword(userId, displayName) {
+    const newPassword = prompt(`請輸入測試員「${displayName}」的新密碼：`);
+    if (newPassword === null) return; // 點擊取消
+    if (newPassword.trim() === '') {
+        showToast('新密碼不能為空！', true);
+        return;
+    }
+    
+    const token = localStorage.getItem('qa_session_token');
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/users/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, userId, newPassword })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '重設密碼失敗');
+        
+        showToast(`測試員「${displayName}」的密碼已重設成功！`);
     } catch (err) {
         console.error(err);
         showToast(err.message, true);
