@@ -373,8 +373,21 @@ async function fetchReports() {
             return;
         }
 
+        const currentUser = localStorage.getItem('qa_display_name');
+        const currentUserRole = localStorage.getItem('qa_role') || 'user';
+
         data.forEach(report => {
             const tr = document.createElement('tr');
+            const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
+            
+            let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
+            if (canModify) {
+                actionButtonsHtml += `
+                    <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
+                    <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
+                `;
+            }
+            
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.case_no || '-')}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(report.project_name)}</td>
@@ -384,9 +397,7 @@ async function fetchReports() {
                     <span class="status-badge status-${report.status}">${report.status}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
-                    <button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>
-                    <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
-                    <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
+                    ${actionButtonsHtml}
                 </td>
             `;
             tbody.appendChild(tr);
