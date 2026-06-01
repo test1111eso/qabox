@@ -8,3 +8,6 @@ account_id = "f3c77bdb0b7c8dc5cbc01977437fa7c3"
 binding = "DB"
 database_name = "qabox"
 database_id = "46ea2bc8-2fb3-4ade-90d0-0277d790a66f"
+
+[build]
+watch_dir = "src"
