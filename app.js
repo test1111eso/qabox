@@ -403,6 +403,10 @@ async function fetchReports() {
         });
     } catch (err) {
         console.error(err);
+        const tbody = document.getElementById('reports-table-body');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
+        }
     }
 }
 
