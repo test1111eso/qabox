@@ -11,12 +11,14 @@ CREATE TABLE IF NOT EXISTS documents (
 
 CREATE TABLE IF NOT EXISTS reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_no TEXT,
     project_name TEXT NOT NULL,
     tester_name TEXT NOT NULL,
     test_date DATE NOT NULL,
     status TEXT NOT NULL, -- 'Pass', 'Fail', 'Blocked'
     bug_link TEXT,
     notes TEXT,
+    is_deleted INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -27,6 +29,8 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    is_active INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

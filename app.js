@@ -1,12 +1,21 @@
 // Cloudflare Worker API URL (請替換為實際部署後的 Worker URL)
 // 測試環境可以先使用 http://127.0.0.1:8787
-const API_BASE = 'https://qagame.test1111-tcm-tc.workers.dev';
+const API_BASE = 'https://qa-backend-api.test1111-tcm-tc.workers.dev';
 
 let dailyChartInstance = null;
 let statusChartInstance = null;
+let currentReportsList = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
+    
+    // 當測試日期變更時，若在新增模式，則自動重新計算案件編號
+    document.getElementById('form-date')?.addEventListener('change', (e) => {
+        const reportId = document.getElementById('form-report-id').value;
+        if (!reportId) {
+            document.getElementById('form-case-no').value = generateNextCaseNo(e.target.value);
+        }
+    });
 });
 
 // Auth Logic
@@ -15,11 +24,27 @@ let isRegisterMode = false;
 function checkAuth() {
     const token = localStorage.getItem('qa_session_token');
     const displayName = localStorage.getItem('qa_display_name');
+    const role = localStorage.getItem('qa_role');
     
     if (token && displayName) {
         document.getElementById('auth-view').classList.add('hidden');
         document.getElementById('main-app').classList.remove('hidden');
         document.getElementById('nav-user-name').innerText = `哈囉，${displayName}`;
+        
+        // 根據角色顯示/隱藏測試員管理導航按鈕
+        const navUsers = document.getElementById('nav-users');
+        if (navUsers) {
+            if (role === 'admin') {
+                navUsers.classList.remove('hidden');
+            } else {
+                navUsers.classList.add('hidden');
+            }
+        }
+        
+        // 預設日期區間為今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filter-start-date').value = today;
+        document.getElementById('filter-end-date').value = today;
         
         loadDashboard();
         initGeneratorLogic();
@@ -91,6 +116,7 @@ async function handleAuthSubmit(e) {
         
         localStorage.setItem('qa_session_token', loginData.token);
         localStorage.setItem('qa_display_name', loginData.display_name);
+        localStorage.setItem('qa_role', loginData.role || 'user');
         
         document.getElementById('auth-username').value = '';
         document.getElementById('auth-password').value = '';
@@ -121,6 +147,11 @@ async function handleLogout() {
     
     localStorage.removeItem('qa_session_token');
     localStorage.removeItem('qa_display_name');
+    localStorage.removeItem('qa_role');
+    
+    const navUsers = document.getElementById('nav-users');
+    if (navUsers) navUsers.classList.add('hidden');
+    
     checkAuth();
 }
 
@@ -135,6 +166,7 @@ function switchView(viewId) {
     if (viewId === 'dashboard') loadDashboard();
     if (viewId === 'reports') fetchReports();
     if (viewId === 'documents') loadDocuments();
+    if (viewId === 'users') fetchUsers();
 }
 
 // Modal Logic
@@ -142,6 +174,10 @@ function openModal() {
     document.getElementById('report-modal').classList.remove('hidden');
     // 設定今日日期為預設值
     document.getElementById('form-date').valueAsDate = new Date();
+    
+    // 自動預填案件編號 (格式: YYYYMMDD-01)
+    const todayStr = document.getElementById('form-date').value;
+    document.getElementById('form-case-no').value = generateNextCaseNo(todayStr);
     
     // 載入記住的測試員
     const savedTester = localStorage.getItem('qa_display_name');
@@ -153,10 +189,42 @@ function openModal() {
     updateGeneratedResult();
 }
 
+// 根據日期自動計算下一個案件編號 (例如：20260601-01, 20260601-02...)
+function generateNextCaseNo(dateStr) {
+    if (!dateStr) return '';
+    // 去除日期連字號: 20260601
+    const prefix = dateStr.replace(/-/g, '');
+    
+    let maxSeq = 0;
+    if (Array.isArray(currentReportsList)) {
+        currentReportsList.forEach(report => {
+            if (report.case_no) {
+                // 相容 20260601-XX 格式
+                if (report.case_no.startsWith(prefix + '-')) {
+                    const seq = parseInt(report.case_no.replace(prefix + '-', ''), 10);
+                    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                }
+                // 相容 2026-06-01-XX 格式
+                else if (report.case_no.startsWith(dateStr + '-')) {
+                    const seq = parseInt(report.case_no.replace(dateStr + '-', ''), 10);
+                    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                }
+            }
+        });
+    }
+    
+    const nextSeq = maxSeq + 1;
+    const nextSeqStr = nextSeq.toString().padStart(2, '0');
+    return `${prefix}-${nextSeqStr}`;
+}
+
 function closeModal() {
     document.getElementById('report-modal').classList.add('hidden');
     document.getElementById('report-form').reset();
     document.getElementById('ticket-input').value = '';
+    document.getElementById('form-report-id').value = '';
+    document.getElementById('modal-title').textContent = '撰寫測試報告';
+    document.getElementById('submit-text').textContent = '儲存報告';
 }
 
 function clearGeneratorForm() {
@@ -228,6 +296,33 @@ async function loadDashboard() {
         document.getElementById('stat-today').textContent = todayCount;
         document.getElementById('stat-blocked').textContent = blocked;
 
+        // 動態填充測試員下拉選單
+        const selectTester = document.getElementById('filter-tester');
+        const currentVal = selectTester.value;
+        const displayName = localStorage.getItem('qa_display_name') || '';
+        
+        selectTester.innerHTML = '<option value="all">全部測試員</option>';
+        const testers = new Set();
+        if (displayName) testers.add(displayName);
+        if (data.testerStats) {
+            data.testerStats.forEach(t => {
+                if (t.tester_name) testers.add(t.tester_name);
+            });
+        }
+        testers.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = t;
+            selectTester.appendChild(opt);
+        });
+
+        // 預設為目前的使用者本人
+        if (!currentVal || currentVal === 'all') {
+            selectTester.value = displayName;
+        } else {
+            selectTester.value = currentVal;
+        }
+
         // Render Charts
         renderCharts(data.dailyStats, data.statusStats);
     } catch (err) {
@@ -238,37 +333,44 @@ async function loadDashboard() {
 
 async function fetchReports() {
     const tester = document.getElementById('filter-tester').value;
-    const date = document.getElementById('filter-date').value;
+    const start_date = document.getElementById('filter-start-date').value;
+    const end_date = document.getElementById('filter-end-date').value;
     
     let url = `${API_BASE}/api/reports?`;
     if (tester) url += `tester=${encodeURIComponent(tester)}&`;
-    if (date) url += `date=${encodeURIComponent(date)}&`;
+    if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
+    if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
 
     try {
         const tbody = document.getElementById('reports-table-body');
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
         
         const res = await fetch(url);
         if (!res.ok) throw new Error('API 無法連線');
         const data = await res.json();
         
+        currentReportsList = data; // 存入全域變數以供編輯時快速查找
+        
         tbody.innerHTML = '';
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
             return;
         }
 
         data.forEach(report => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.case_no || '-')}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(report.project_name)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.tester_name)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${report.test_date}</td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <span class="status-badge status-${report.status}">${report.status}</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:underline">
-                    ${report.bug_link ? `<a href="${escapeHtml(report.bug_link)}" target="_blank">查看連結</a>` : '-'}
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
+                    <button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>
+                    <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
+                    <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -279,9 +381,147 @@ async function fetchReports() {
 }
 
 function clearFilters() {
-    document.getElementById('filter-tester').value = '';
-    document.getElementById('filter-date').value = '';
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('filter-start-date').value = today;
+    document.getElementById('filter-end-date').value = today;
+    
+    const displayName = localStorage.getItem('qa_display_name') || '';
+    document.getElementById('filter-tester').value = displayName || 'all';
+    
     fetchReports();
+}
+
+// 複製該筆報告為新範本 (點擊後自動載入資料並進入「新增模式」以新增另一筆)
+function copyReportNotes(id) {
+    const report = currentReportsList.find(r => r.id === id);
+    if (!report) {
+        showToast('找不到此報告資料', true);
+        return;
+    }
+
+    // 開啟 Modal
+    document.getElementById('report-modal').classList.remove('hidden');
+    
+    // 設定為 新增 模式 (這樣送出時才會是 POST 新增一筆)
+    document.getElementById('form-report-id').value = ''; 
+    document.getElementById('modal-title').textContent = '撰寫測試報告';
+    document.getElementById('submit-text').textContent = '儲存報告';
+
+    // 填入基本與獨立欄位
+    document.getElementById('form-case-no').value = generateNextCaseNo(report.test_date);
+    document.getElementById('form-project').value = report.project_name || '';
+    document.getElementById('form-tester').value = report.tester_name || '';
+    document.getElementById('form-date').value = report.test_date || '';
+    document.getElementById('form-status').value = report.status || 'Pass';
+    document.getElementById('form-test-case').value = report.bug_link || '';
+
+    // 使用工單解析器逆向還原其他複雜欄位
+    if (report.notes) {
+        document.getElementById('ticket-input').value = report.notes;
+        // 手動觸發 ticket-input 的 input 事件以執行正則解析並填入欄位
+        const event = new Event('input', { bubbles: true });
+        document.getElementById('ticket-input').dispatchEvent(event);
+        
+        // 額外解析工單解析器不包含的欄位 (例如備註、風險評估、通過率、測試步驟)
+        const text = report.notes;
+        
+        const riskMatch = text.match(/風險評估[：:]([^\n]+)/);
+        if (riskMatch) document.getElementById('form-risk').value = riskMatch[1].trim();
+
+        const passRateMatch = text.match(/通過率\(%\)[：:]([^\n]+)/) || text.match(/通過率[：:]([^\n]+)/);
+        if (passRateMatch) document.getElementById('form-pass-rate').value = passRateMatch[1].trim();
+
+        const notesMatch = text.match(/備註[：:]([^\n]+)/);
+        if (notesMatch) document.getElementById('form-notes').value = notesMatch[1].trim();
+
+        const testStepsMatch = text.match(/測試步驟[：:]\n([\s\S]*?)(?=\n工單說明|\n風險評估|\n備註|\n處理狀態|$)/);
+        if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
+
+        const stepsMatch = text.match(/工單說明[：:]\n([\s\S]*?)(?=\n風險評估|\n通過率|\n備註|\n處理狀態|$)/);
+        if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
+        
+        // 重新更新預覽結果
+        updateGeneratedResult();
+    }
+
+    showToast('已複製報告內容為新範本，修改完案件編號即可儲存！');
+}
+
+// 編輯測試報告 (載入資料至 Form 中並開 Modal)
+function editReport(id) {
+    const report = currentReportsList.find(r => r.id === id);
+    if (!report) {
+        showToast('找不到此報告資料', true);
+        return;
+    }
+
+    // 開啟 Modal
+    document.getElementById('report-modal').classList.remove('hidden');
+    
+    // 設定為編輯模式
+    document.getElementById('form-report-id').value = report.id;
+    document.getElementById('modal-title').textContent = `修改測試報告：${report.case_no || ''}`;
+    document.getElementById('submit-text').textContent = '更新報告';
+
+    // 填入基本與獨立欄位
+    document.getElementById('form-case-no').value = report.case_no || '';
+    document.getElementById('form-project').value = report.project_name || '';
+    document.getElementById('form-tester').value = report.tester_name || '';
+    document.getElementById('form-date').value = report.test_date || '';
+    document.getElementById('form-status').value = report.status || 'Pass';
+    document.getElementById('form-test-case').value = report.bug_link || '';
+
+    // 使用工單解析器逆向還原其他複雜欄位
+    if (report.notes) {
+        document.getElementById('ticket-input').value = report.notes;
+        // 手動觸發 ticket-input 的 input 事件以執行正則解析並填入欄位
+        const event = new Event('input', { bubbles: true });
+        document.getElementById('ticket-input').dispatchEvent(event);
+        
+        // 額外解析工單解析器不包含的欄位 (例如備註、風險評估、通過率、測試步驟)
+        const text = report.notes;
+        
+        const riskMatch = text.match(/風險評估[：:]([^\n]+)/);
+        if (riskMatch) document.getElementById('form-risk').value = riskMatch[1].trim();
+
+        const passRateMatch = text.match(/通過率\(%\)[：:]([^\n]+)/) || text.match(/通過率[：:]([^\n]+)/);
+        if (passRateMatch) document.getElementById('form-pass-rate').value = passRateMatch[1].trim();
+
+        const notesMatch = text.match(/備註[：:]([^\n]+)/);
+        if (notesMatch) document.getElementById('form-notes').value = notesMatch[1].trim();
+
+        const testStepsMatch = text.match(/測試步驟[：:]\n([\s\S]*?)(?=\n工單說明|\n風險評估|\n備註|\n處理狀態|$)/);
+        if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
+
+        const stepsMatch = text.match(/工單說明[：:]\n([\s\S]*?)(?=\n風險評估|\n通過率|\n備註|\n處理狀態|$)/);
+        if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
+        
+        // 重新更新預覽結果
+        updateGeneratedResult();
+    }
+}
+
+// 刪除測試報告
+async function deleteReport(id) {
+    if (!confirm('確定要刪除這筆測試報告嗎？此動作無法復原。')) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, token: localStorage.getItem('qa_session_token') })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '刪除失敗');
+        
+        showToast('測試報告已刪除！');
+        fetchReports(); // 刷新表格
+        loadDashboard(); // 刷新儀表板
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
 }
 
 async function submitReport(e) {
@@ -292,14 +532,23 @@ async function submitReport(e) {
         return;
     }
 
+    const reportId = document.getElementById('form-report-id').value;
+    const isEditMode = !!reportId;
+
     const payload = {
-        project_name: document.getElementById('form-project').value,
-        tester_name: document.getElementById('form-tester').value,
+        token: localStorage.getItem('qa_session_token'),
+        case_no: document.getElementById('form-case-no').value.trim(),
+        project_name: document.getElementById('form-project').value.trim(),
+        tester_name: document.getElementById('form-tester').value.trim(),
         test_date: document.getElementById('form-date').value,
         status: document.getElementById('form-status').value,
-        bug_link: document.getElementById('form-test-case').value, // 存在資料庫的 bug_link 欄位
+        bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
         notes: document.getElementById('generated-result').value,
     };
+    
+    if (isEditMode) {
+        payload.id = parseInt(reportId, 10);
+    }
     
     if (payload.tester_name) {
         localStorage.setItem('qa_tester_name', payload.tester_name);
@@ -309,27 +558,29 @@ async function submitReport(e) {
     const spinner = document.getElementById('submit-spinner');
     
     btnText.textContent = '處理中...';
-    spinner.classList.remove('hidden');
+    if (spinner) spinner.classList.remove('hidden');
 
     try {
-        const res = await fetch(`${API_BASE}/api/reports`, {
+        const endpoint = isEditMode ? `${API_BASE}/api/reports/update` : `${API_BASE}/api/reports`;
+        const res = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
-        if (!res.ok) throw new Error('新增失敗');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || (isEditMode ? '修改失敗' : '新增失敗'));
         
-        showToast('測試報告已成功新增！');
+        showToast(isEditMode ? '測試報告已成功修改！' : '測試報告已成功新增！');
         closeModal();
         fetchReports(); // Refresh table
         loadDashboard(); // Refresh stats
     } catch (err) {
         console.error(err);
-        showToast('新增報告失敗，請檢查 API 連線', true);
+        showToast(err.message, true);
     } finally {
-        btnText.textContent = '儲存報告';
-        spinner.classList.add('hidden');
+        btnText.textContent = isEditMode ? '更新報告' : '儲存報告';
+        if (spinner) spinner.classList.add('hidden');
     }
 }
 
@@ -370,7 +621,7 @@ async function loadDocuments() {
 
 // ================= Generator Logic =================
 function initGeneratorLogic() {
-    const inputs = ['form-project', 'form-tester', 'form-developer', 'form-date', 'form-parent-ticket', 'form-sub-ticket', 'form-version', 'form-env', 'form-device', 'form-test-case', 'form-test-steps', 'form-steps', 'form-risk', 'form-pass-rate', 'form-status', 'form-notes', 'chk-ipad', 'chk-iphone', 'form-ipad-version', 'form-iphone-version'];
+    const inputs = ['form-case-no', 'form-project', 'form-tester', 'form-developer', 'form-date', 'form-parent-ticket', 'form-sub-ticket', 'form-version', 'form-env', 'form-device', 'form-test-case', 'form-test-steps', 'form-steps', 'form-risk', 'form-pass-rate', 'form-status', 'form-notes', 'chk-ipad', 'chk-iphone', 'form-ipad-version', 'form-iphone-version'];
     
     inputs.forEach(id => {
         const el = document.getElementById(id);
@@ -540,6 +791,7 @@ function parseGrafanaVersion() {
 }
 
 function updateGeneratedResult() {
+    const caseNoVal = document.getElementById('form-case-no') ? document.getElementById('form-case-no').value.trim() : '';
     const projectNameVal = document.getElementById('form-project') ? document.getElementById('form-project').value.trim() : '';
     const dateVal = document.getElementById('form-date').value;
     const formattedDate = dateVal ? dateVal.replace(/-/g, '/') : '';
@@ -577,6 +829,7 @@ function updateGeneratedResult() {
 
     let template = `【測試紀錄】`;
     
+    if (caseNoVal) template += `\n案件編號：${caseNoVal}`;
     if (projectNameVal) template += `\n專案名稱：${projectNameVal}`;
     if (formattedDate) template += `\n測試日期：${formattedDate}`;
     if (testerVal) template += `\n測試人員：${testerVal}`;
@@ -787,4 +1040,197 @@ function escapeHtml(unsafe) {
          .replace(/>/g, "&gt;")
          .replace(/"/g, "&quot;")
          .replace(/'/g, "&#039;");
+}
+
+// ================= Trash / Recycle Bin Logic =================
+
+function openTrashModal() {
+    document.getElementById('trash-modal').classList.remove('hidden');
+    fetchTrashReports();
+}
+
+function closeTrashModal() {
+    document.getElementById('trash-modal').classList.add('hidden');
+}
+
+async function fetchTrashReports() {
+    const token = localStorage.getItem('qa_session_token');
+    const tbody = document.getElementById('trash-table-body');
+    tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/trash?token=${encodeURIComponent(token)}`);
+        if (!res.ok) throw new Error('無法載入垃圾桶');
+        const data = await res.json();
+        
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">垃圾桶目前是空的</td></tr>';
+            return;
+        }
+        
+        const currentUser = localStorage.getItem('qa_display_name');
+        const currentUserRole = localStorage.getItem('qa_role') || 'user';
+        
+        data.forEach(report => {
+            const tr = document.createElement('tr');
+            const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
+            
+            let actionsHtml = '';
+            if (canModify) {
+                actionsHtml = `
+                    <button onclick="restoreReport(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">復原 ↩️</button>
+                    <button onclick="purgeReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">永久刪除 ❌</button>
+                `;
+            } else {
+                actionsHtml = `
+                    <span class="text-gray-400 text-xs italic">無更動權限</span>
+                `;
+            }
+            
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.case_no || '-')}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(report.project_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.tester_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${report.test_date}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3 align-middle">
+                    ${actionsHtml}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入垃圾桶失敗</td></tr>';
+    }
+}
+
+async function restoreReport(id) {
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, token: localStorage.getItem('qa_session_token') })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '復原失敗');
+        
+        showToast('測試報告已成功復原！');
+        fetchTrashReports(); // 刷新垃圾桶
+        fetchReports(); // 刷新主畫面表格
+        loadDashboard(); // 刷新儀表板
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
+}
+
+async function purgeReport(id) {
+    if (!confirm('警告：確定要永久刪除此報告嗎？此動作將從資料庫徹底移除，無法復原。')) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/reports/purge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, token: localStorage.getItem('qa_session_token') })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '永久刪除失敗');
+        
+        showToast('報告已永久刪除。');
+        fetchTrashReports(); // 刷新垃圾桶
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
+}
+
+// ================= Users Management Logic (Admin Only) =================
+
+async function fetchUsers() {
+    const token = localStorage.getItem('qa_session_token');
+    const tbody = document.getElementById('users-table-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/users?token=${encodeURIComponent(token)}`);
+        if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.error || '無法載入使用者列表');
+        }
+        const data = await res.json();
+        
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">尚無任何使用者</td></tr>';
+            return;
+        }
+        
+        data.forEach(user => {
+            const tr = document.createElement('tr');
+            
+            const isActiveText = user.is_active === 1 ? '🟢 已啟用' : '🔴 已關閉';
+            const buttonText = user.is_active === 1 ? '關閉 🔒' : '啟用 🔓';
+            const buttonClass = user.is_active === 1 
+                ? 'text-red-600 hover:text-red-800 font-semibold' 
+                : 'text-secondary hover:text-green-700 font-semibold';
+            
+            const currentUser = localStorage.getItem('qa_display_name');
+            // 若為自己，則不顯示關閉按鈕（安全措施）
+            const isSelf = user.username === '20200715' || user.display_name === currentUser;
+            const actionButton = isSelf 
+                ? '<span class="text-gray-400 text-xs italic">管理員本人 (無法停用)</span>' 
+                : `<button onclick="toggleUserActive(${user.id}, ${user.is_active})" class="${buttonClass} transition">${buttonText}</button>`;
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(user.username)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(user.display_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}">
+                        ${user.role}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(user.created_at || '-')}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold">${isActiveText}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${actionButton}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
+async function toggleUserActive(userId, currentStatus) {
+    const token = localStorage.getItem('qa_session_token');
+    const nextStatus = currentStatus === 1 ? 0 : 1;
+    const confirmMsg = nextStatus === 1 
+        ? '確定要「啟用」此測試員帳號嗎？啟用後該帳號即可登入系統。' 
+        : '確定要「關閉」此測試員帳號嗎？關閉後該帳號將無法登入系統並被強制登出。';
+        
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/users/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, userId, is_active: nextStatus })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '操作失敗');
+        
+        showToast('測試員狀態已成功變更！');
+        fetchUsers(); // 刷新使用者列表
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
 }

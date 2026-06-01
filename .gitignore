@@ -1,0 +1,7 @@
+.wrangler/
+worker/.wrangler/
+node_modules/
+*.log
+.assetsignore
+.wranglerignore
+start_local.bat

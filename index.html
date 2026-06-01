@@ -52,6 +52,9 @@
                     <button onclick="switchView('documents')"
                         class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
                         id="nav-documents">文件管理</button>
+                    <button onclick="switchView('users')"
+                        class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition hidden"
+                        id="nav-users">測試員管理</button>
                     <div class="flex items-center gap-2 ml-4 border-l border-gray-600 pl-4">
                         <span id="nav-user-name" class="text-sm font-medium text-gray-300"></span>
                         <button onclick="handleLogout()" class="text-sm text-red-400 hover:text-red-300 transition font-medium">登出</button>
@@ -116,21 +119,36 @@
             <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mb-6 flex flex-wrap gap-4 items-end">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">依測試員篩選</label>
-                    <input type="text" id="filter-tester"
-                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary w-48"
-                        placeholder="輸入姓名...">
+                    <select id="filter-tester"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary w-48 bg-white">
+                        <option value="all">全部測試員</option>
+                    </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">依日期篩選</label>
-                    <input type="date" id="filter-date"
+                    <label class="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
+                    <input type="date" id="filter-start-date"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
+                    <input type="date" id="filter-end-date"
                         class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary">
                 </div>
                 <button onclick="fetchReports()"
-                    class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-md text-sm font-medium transition">
+                    class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-medium transition shadow-sm">
                     搜尋
                 </button>
                 <button onclick="clearFilters()"
                     class="text-sm text-gray-500 hover:text-gray-700 underline ml-2">清除條件</button>
+                
+                <!-- 垃圾桶按鈕 (右對齊) -->
+                <button onclick="openTrashModal()"
+                    class="ml-auto flex items-center gap-1.5 px-4 py-2 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-sm font-semibold transition shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    垃圾桶 🗑️
+                </button>
             </div>
 
             <!-- Reports Table -->
@@ -139,6 +157,9 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    案件編號</th>
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     專案</th>
@@ -153,13 +174,13 @@
                                     狀態</th>
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Bug 連結</th>
+                                    操作</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200" id="reports-table-body">
                             <!-- Data populated by JS -->
                             <tr>
-                                <td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td>
+                                <td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -176,6 +197,34 @@
                 <div class="col-span-full text-center py-8 text-gray-500">載入中...</div>
             </div>
         </div>
+
+        <!-- View: Users (Admin Only) -->
+        <div id="view-users" class="view-section hidden fade-in">
+            <h1 class="text-3xl font-bold mb-6 text-gray-900">測試員管理</h1>
+            <p class="text-gray-600 mb-6">啟用或關閉測試人員帳號。未啟用的帳號將無法登入系統。</p>
+            
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">帳號 (Username)</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">顯示名稱</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">角色 (Role)</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">註冊時間</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">登入狀態</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="users-table-body">
+                            <tr>
+                                <td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Modal for New Report with Generator -->
@@ -183,7 +232,7 @@
         class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 overflow-hidden flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                <h3 class="text-lg font-bold text-gray-900">撰寫測試報告</h3>
+                <h3 id="modal-title" class="text-lg font-bold text-gray-900">撰寫測試報告</h3>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
@@ -211,6 +260,7 @@
 
 
                     <form id="report-form" class="space-y-4">
+                        <input type="hidden" id="form-report-id" value="">
                         <div class="grid grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">測試人員 *</label>
@@ -229,11 +279,18 @@
                             </div>
                         </div>
 
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">專案名稱 <span
-                                    class="text-red-500">*</span></label>
-                            <input type="text" id="form-project" required
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="col-span-1">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">案件編號</label>
+                                <input type="text" id="form-case-no" placeholder="例如：T12345..."
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">專案名稱 <span
+                                        class="text-red-500">*</span></label>
+                                <input type="text" id="form-project" required
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                            </div>
                         </div>
 
                         <div>
@@ -562,6 +619,53 @@
             <div class="mt-6 text-center text-sm text-gray-500">
                 <span id="auth-toggle-text">還沒有帳號嗎？</span>
                 <button type="button" onclick="toggleAuthMode()" class="text-primary font-bold hover:underline ml-1" id="auth-toggle-btn">點此註冊</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Trash/Recycle Bin -->
+    <div id="trash-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-red-50">
+                <h3 class="text-lg font-bold text-red-800 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                    報告垃圾桶 🗑️
+                </h3>
+                <button onclick="closeTrashModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow">
+                <p class="text-xs text-gray-500 mb-4">💡 說明：普通測試員在此僅能查看自己被刪除的報告；管理員可查看並復原所有人的報告。已軟刪除的報告可在此「復原」至主列表，或執行「永久刪除」。</p>
+                <div class="bg-white rounded-lg border border-gray-100 overflow-hidden shadow-inner">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">案件編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">專案</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">測試員</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日期</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="trash-table-body">
+                            <tr>
+                                <td colspan="5" class="px-6 py-4 text-center text-gray-500">垃圾桶目前是空的</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50">
+                <button onclick="closeTrashModal()"
+                    class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition">關閉</button>
             </div>
         </div>
     </div>
