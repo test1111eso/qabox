@@ -41,9 +41,10 @@ function checkAuth() {
             }
         }
         
-        // 預設日期區間為空，以展示所有案件
-        document.getElementById('filter-start-date').value = '';
-        document.getElementById('filter-end-date').value = '';
+        // 預設日期區間為今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filter-start-date').value = today;
+        document.getElementById('filter-end-date').value = today;
         
         loadDashboard();
         initGeneratorLogic();
@@ -331,9 +332,9 @@ async function loadDashboard() {
             selectTester.appendChild(opt);
         });
 
-        // 預設為全部測試員
-        if (!currentVal) {
-            selectTester.value = 'all';
+        // 預設為目前的使用者本人
+        if (!currentVal || currentVal === 'all') {
+            selectTester.value = displayName;
         } else {
             selectTester.value = currentVal;
         }
@@ -411,9 +412,12 @@ async function fetchReports() {
 }
 
 function clearFilters() {
-    document.getElementById('filter-start-date').value = '';
-    document.getElementById('filter-end-date').value = '';
-    document.getElementById('filter-tester').value = 'all';
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('filter-start-date').value = today;
+    document.getElementById('filter-end-date').value = today;
+    
+    const displayName = localStorage.getItem('qa_display_name') || '';
+    document.getElementById('filter-tester').value = displayName || 'all';
     
     fetchReports();
 }
