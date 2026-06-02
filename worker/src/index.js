@@ -128,7 +128,7 @@ export default {
           }
         }
         
-        query += ' ORDER BY created_at DESC LIMIT 100';
+        query += ' ORDER BY is_pinned DESC, test_date DESC, created_at DESC LIMIT 100';
         
         const { results } = await env.DB.prepare(query).bind(...params).all();
         return new Response(JSON.stringify(results), {
@@ -136,14 +136,49 @@ export default {
         });
       }
 
+      // 2.5 取得下一個案件編號
+      if (url.pathname === '/api/reports/next-case-no' && request.method === 'GET') {
+        const dateStr = url.searchParams.get('date');
+        const type = url.searchParams.get('type') || 'normal';
+        
+        if (!dateStr) {
+          return new Response(JSON.stringify({ error: 'Missing date parameter' }), { status: 400, headers: corsHeaders });
+        }
+        
+        const datePrefix = dateStr.replace(/-/g, '');
+        // 找尋當日所有案件編號 (包含 P開頭、T開頭、以及舊版無英文字母開頭)，找出最大的流水號
+        const { results } = await env.DB.prepare(
+          `SELECT case_no FROM reports WHERE case_no LIKE ? OR case_no LIKE ? OR case_no LIKE ?`
+        ).bind(`${datePrefix}-%`, `T${datePrefix}-%`, `P${datePrefix}-%`).all();
+        
+        let maxSeq = 0;
+        if (results && results.length > 0) {
+          results.forEach(row => {
+            const seqMatch = row.case_no.match(/-(\d+)$/);
+            if (seqMatch) {
+              const seq = parseInt(seqMatch[1], 10);
+              if (seq > maxSeq) maxSeq = seq;
+            }
+          });
+        }
+        
+        const nextSeq = maxSeq + 1;
+        const letter = type === 'prod' ? 'P' : 'T';
+        const nextCaseNo = `${letter}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
+        
+        return new Response(JSON.stringify({ nextCaseNo }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // 3. 新增報告
       if (url.pathname === '/api/reports' && request.method === 'POST') {
         const body = await request.json();
-        const { case_no, project_name, tester_name, test_date, status, bug_link, notes } = body;
+        const { case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
         
         const result = await env.DB.prepare(
-          'INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes).run();
+          'INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null).run();
         
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -153,7 +188,7 @@ export default {
       // 3.1 修改報告
       if (url.pathname === '/api/reports/update' && request.method === 'POST') {
         const body = await request.json();
-        const { id, token, case_no, project_name, tester_name, test_date, status, bug_link, notes } = body;
+        const { id, token, case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
         
         const user = await getUserByToken(token, env);
         if (!user) {
@@ -170,8 +205,33 @@ export default {
         }
 
         await env.DB.prepare(
-          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ? WHERE id = ?'
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, id).run();
+          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
+        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, id).run();
+        
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3.1.5 釘選/取消釘選報告
+      if (url.pathname === '/api/reports/pin' && request.method === 'POST') {
+        const { id, is_pinned, token } = await request.json();
+        
+        const user = await getUserByToken(token, env);
+        if (!user) {
+          return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
+        }
+
+        const report = await env.DB.prepare('SELECT * FROM reports WHERE id = ?').bind(id).first();
+        if (!report) {
+          return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
+        }
+
+        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+          return new Response(JSON.stringify({ error: '您無權釘選其他測試員的報告' }), { status: 403, headers: corsHeaders });
+        }
+        
+        await env.DB.prepare('UPDATE reports SET is_pinned = ? WHERE id = ?').bind(is_pinned ? 1 : 0, id).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -311,24 +371,126 @@ export default {
         });
       }
 
-      // 4. 取得統計數據 (每日測試數量、各狀態總計)
+      // 3.8 重設使用者密碼 (限管理員)
+      if (url.pathname === '/api/users/reset-password' && request.method === 'POST') {
+        const { token, userId, newPassword } = await request.json();
+        const user = await getUserByToken(token, env);
+        if (!user) {
+          return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
+        }
+        if (user.role !== 'admin') {
+          return new Response(JSON.stringify({ error: '無權限存取此資源' }), { status: 403, headers: corsHeaders });
+        }
+
+        if (!newPassword || newPassword.trim() === '') {
+          return new Response(JSON.stringify({ error: '新密碼不能為空' }), { status: 400, headers: corsHeaders });
+        }
+
+        const newHash = await hashPassword(newPassword);
+        await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+          .bind(newHash, userId)
+          .run();
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 4. 取得統計數據 (每日測試數量、各狀態總計、T/P單數)
       if (url.pathname === '/api/stats' && request.method === 'GET') {
+        const start_date = url.searchParams.get('start_date');
+        const end_date = url.searchParams.get('end_date');
+
+        // 取得台灣時間的今日與本月一日
+        const twDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+        const yyyy = twDate.getFullYear();
+        const mm = String(twDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(twDate.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        const monthStartStr = `${yyyy}-${mm}-01`;
+
+        let queryBase = 'FROM reports WHERE is_deleted = 0';
+        let params = [];
+
+        if (start_date) {
+          queryBase += ' AND test_date >= ?';
+          params.push(start_date);
+        }
+        if (end_date) {
+          queryBase += ' AND test_date <= ?';
+          params.push(end_date);
+        }
+
         const statusStats = await env.DB.prepare(
-          'SELECT status, COUNT(*) as count FROM reports WHERE is_deleted = 0 GROUP BY status'
-        ).all();
+          `SELECT status, COUNT(*) as count ${queryBase} GROUP BY status`
+        ).bind(...params).all();
 
         const dailyStats = await env.DB.prepare(
-          'SELECT test_date, COUNT(*) as count FROM reports WHERE is_deleted = 0 GROUP BY test_date ORDER BY test_date DESC LIMIT 7'
-        ).all();
+          `SELECT test_date, COUNT(*) as count ${queryBase} GROUP BY test_date ORDER BY test_date DESC LIMIT 30`
+        ).bind(...params).all();
 
-        const testerStats = await env.DB.prepare(
-          'SELECT tester_name, COUNT(*) as count FROM reports WHERE is_deleted = 0 GROUP BY tester_name ORDER BY count DESC'
-        ).all();
+        let tpQueryBase = 'FROM reports WHERE is_deleted = 0';
+        let tpParams = [];
+        if (start_date) {
+          tpQueryBase += ' AND test_date >= ?';
+          tpParams.push(start_date);
+        }
+        if (end_date) {
+          tpQueryBase += ' AND test_date <= ?';
+          tpParams.push(end_date);
+        }
+        if (!start_date && !end_date) {
+            tpQueryBase += ' AND test_date = ?';
+            tpParams.push(todayStr);
+        }
+
+        const typeStats = await env.DB.prepare(
+          `SELECT 
+            SUM(CASE WHEN case_no LIKE 'T%' THEN 1 ELSE 0 END) as t_count,
+            SUM(CASE WHEN case_no LIKE 'P%' THEN 1 ELSE 0 END) as p_count
+           ${tpQueryBase}`
+        ).bind(...tpParams).first();
+
+        let totalQueryBase = 'FROM reports WHERE is_deleted = 0';
+        let totalParams = [];
+        if (start_date) {
+          totalQueryBase += ' AND test_date >= ?';
+          totalParams.push(start_date);
+        }
+        if (end_date) {
+          totalQueryBase += ' AND test_date <= ?';
+          totalParams.push(end_date);
+        }
+        if (!start_date && !end_date) {
+            totalQueryBase += ' AND test_date >= ?';
+            totalParams.push(monthStartStr);
+        }
+
+        const monthTotal = await env.DB.prepare(
+          `SELECT COUNT(*) as count ${totalQueryBase}`
+        ).bind(...totalParams).first();
+
+
+
+        const testerQuery = `
+          SELECT 
+            tester_name, 
+            COUNT(*) as total_count,
+            SUM(CASE WHEN test_date = ? THEN 1 ELSE 0 END) as today_count,
+            SUM(CASE WHEN test_date >= ? AND test_date <= ? THEN 1 ELSE 0 END) as month_count
+          FROM reports 
+          WHERE is_deleted = 0 
+          GROUP BY tester_name 
+          ORDER BY month_count DESC, today_count DESC
+        `;
+        const testerStats = await env.DB.prepare(testerQuery).bind(todayStr, monthStartStr, todayStr).all();
 
         return new Response(JSON.stringify({
           statusStats: statusStats.results,
           dailyStats: dailyStats.results,
-          testerStats: testerStats.results
+          testerStats: testerStats.results,
+          typeStats: typeStats,
+          monthTotal: monthTotal.count
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

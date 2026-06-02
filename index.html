@@ -46,12 +46,15 @@
                     <button onclick="switchView('dashboard')"
                         class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition active"
                         id="nav-dashboard">儀表板</button>
+                    <button onclick="switchView('workspace')"
+                        class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
+                        id="nav-workspace">個人工作臺</button>
                     <button onclick="switchView('reports')"
                         class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
                         id="nav-reports">測試報告</button>
                     <button onclick="switchView('documents')"
                         class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
-                        id="nav-documents">文件管理</button>
+                        id="nav-documents">協作中心</button>
                     <button onclick="switchView('users')"
                         class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition hidden"
                         id="nav-users">測試員管理</button>
@@ -67,22 +70,121 @@
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="main-content">
 
+        <!-- View: Workspace -->
+        <div id="view-workspace" class="view-section hidden fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-900">個人工作臺</h1>
+                <div class="flex gap-3">
+                    <button onclick="generateReportSummary('daily')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-5 py-2.5 rounded-lg text-sm font-bold transition shadow-sm border border-indigo-200 flex items-center gap-2 transform hover:scale-105">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                        日報表
+                    </button>
+                    <button onclick="generateReportSummary('monthly')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 px-5 py-2.5 rounded-lg text-sm font-bold transition shadow-sm border border-purple-200 flex items-center gap-2 transform hover:scale-105">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        月報表
+                    </button>
+                    <button onclick="openTrashModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-2.5 rounded-lg text-sm font-bold transition shadow-sm border border-gray-200 flex items-center gap-2 transform hover:scale-105">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        垃圾桶
+                    </button>
+                </div>
+            </div>
+
+            <!-- Workspace Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm p-6 border border-blue-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-sm font-bold text-blue-800 mb-1">今日新增報告</h3>
+                            <p class="text-4xl font-black text-blue-600" id="ws-stat-today">0</p>
+                        </div>
+                        <div class="p-3 bg-white rounded-full text-blue-500 shadow-sm">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl shadow-sm p-6 border border-indigo-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-sm font-bold text-indigo-800 mb-1">本月累計測試</h3>
+                            <p class="text-4xl font-black text-indigo-600" id="ws-stat-month">0</p>
+                        </div>
+                        <div class="p-3 bg-white rounded-full text-indigo-500 shadow-sm">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-xl shadow-sm p-6 border border-red-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-sm font-bold text-red-800 mb-1">累計阻礙 / 失敗</h3>
+                            <p class="text-4xl font-black text-red-600" id="ws-stat-fail">0</p>
+                        </div>
+                        <div class="p-3 bg-white rounded-full text-red-500 shadow-sm">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workspace Recent Reports -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-900">最近測試紀錄</h3>
+                    <button onclick="switchView('reports')" class="text-sm text-primary hover:text-blue-700 font-medium">查看全部 &rarr;</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">案件編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">專案</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日期</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">狀態</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" id="ws-recent-reports-body">
+                            <tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- View: Dashboard -->
         <div id="view-dashboard" class="view-section fade-in">
-            <h1 class="text-3xl font-bold mb-6 text-gray-900">總覽儀表板</h1>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                <h1 class="text-3xl font-bold text-gray-900">總覽儀表板</h1>
+                <div class="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-100">
+                    <span class="text-sm font-medium text-gray-600 px-2">篩選區間</span>
+                    <input type="date" id="dash-filter-start" class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
+                    <span class="text-gray-400">至</span>
+                    <input type="date" id="dash-filter-end" class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
+                    <button onclick="loadDashboard()" class="bg-primary hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium transition ml-1">套用</button>
+                    <button onclick="document.getElementById('dash-filter-start').value=''; document.getElementById('dash-filter-end').value=''; loadDashboard();" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium transition ml-1">清除</button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <!-- Summary Cards -->
-                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
-                    <h3 class="text-sm font-medium text-gray-500 mb-1">總測試報告數</h3>
-                    <p class="text-3xl font-bold text-dark" id="stat-total">0</p>
+                <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-xs font-medium text-gray-500 mb-1" id="label-total-count">本月案件</h3>
+                    <p class="text-2xl font-bold text-dark" id="stat-total">0</p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
-                    <h3 class="text-sm font-medium text-gray-500 mb-1">今日新增報告</h3>
-                    <p class="text-3xl font-bold text-primary" id="stat-today">0</p>
+                <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-xs font-medium text-gray-500 mb-1" id="label-t-count">今日案件</h3>
+                    <p class="text-2xl font-bold text-green-600" id="stat-t-count">0</p>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 hover:shadow-md transition">
-                    <h3 class="text-sm font-medium text-gray-500 mb-1">阻礙中 (Blocked)</h3>
-                    <p class="text-3xl font-bold text-red-500" id="stat-blocked">0</p>
+                <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-xs font-medium text-gray-500 mb-1" id="label-p-count">今日上正式</h3>
+                    <p class="text-2xl font-bold text-purple-600" id="stat-p-count">0</p>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md transition">
+                    <h3 class="text-xs font-medium text-gray-500 mb-1">阻礙中 (Blocked)</h3>
+                    <p class="text-2xl font-bold text-red-500" id="stat-blocked">0</p>
                 </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -99,29 +201,71 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 測試員案件統計 -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mt-8">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
+                    <h3 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z">
+                            </path>
+                        </svg>
+                        測試員案件統計
+                    </h3>
+                </div>
+                
+                <div class="overflow-hidden rounded-lg border border-gray-100">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">測試員</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">今日</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">本月</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">累計</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tester-stats-body" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center text-gray-500">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- View: Reports -->
         <div id="view-reports" class="view-section hidden fade-in">
             <div class="flex justify-between items-center mb-6">
                 <h1 class="text-3xl font-bold text-gray-900">測試報告</h1>
-                <button onclick="openModal()"
-                    class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    新增報告
-                </button>
+                <div class="flex gap-2">
+                    <button onclick="openModal('prod')"
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        上正式
+                    </button>
+                    <button onclick="openModal()"
+                        class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        新增報告
+                    </button>
+                </div>
             </div>
 
             <!-- Filters -->
             <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 mb-6 flex flex-wrap gap-4 items-end">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">依測試員篩選</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">測試工程師</label>
                     <select id="filter-tester"
                         class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary w-48 bg-white">
-                        <option value="all">全部測試員</option>
+                        <option value="all">全部</option>
                     </select>
                 </div>
                 <div>
@@ -138,6 +282,7 @@
                     class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-medium transition shadow-sm">
                     搜尋
                 </button>
+                <button onclick="setReportsToday()" class="bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100 px-4 py-2 rounded-md text-sm font-medium transition shadow-sm">今日</button>
                 <button onclick="clearFilters()"
                     class="text-sm text-gray-500 hover:text-gray-700 underline ml-2">清除條件</button>
                 
@@ -172,9 +317,6 @@
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     狀態</th>
-                                <th
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    操作</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200" id="reports-table-body">
@@ -188,13 +330,44 @@
             </div>
         </div>
 
-        <!-- View: Documents -->
+        <!-- View: Collaboration -->
         <div id="view-documents" class="view-section hidden fade-in">
-            <h1 class="text-3xl font-bold mb-6 text-gray-900">文件管理</h1>
-            <p class="text-gray-600 mb-6">點擊連結前往相對應的文件說明。</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="documents-grid">
-                <!-- Data populated by JS -->
-                <div class="col-span-full text-center py-8 text-gray-500">載入中...</div>
+            <h1 class="text-3xl font-bold mb-6 text-gray-900">協作中心</h1>
+            <p class="text-gray-600 mb-6">佈告欄與代辦事項，目前所有資料皆暫存於您的瀏覽器中。</p>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 佈告欄 -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[70vh]">
+                    <div class="px-5 py-4 border-b border-gray-100 bg-blue-50/50 flex justify-between items-center">
+                        <h3 class="font-bold text-blue-800 flex items-center gap-2">
+                            <span>📌</span> 佈告欄
+                        </h3>
+                    </div>
+                    <div class="p-4 flex flex-col gap-3 overflow-y-auto flex-1" id="collab-bulletin-list">
+                        <!-- Items -->
+                    </div>
+                    <div class="p-4 border-t border-gray-100 bg-gray-50 flex gap-2">
+                        <input type="text" id="collab-bulletin-input" placeholder="新增公告..." class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary" onkeypress="if(event.key === 'Enter') addCollabItem('bulletin')">
+                        <button onclick="addCollabItem('bulletin')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">發佈</button>
+                    </div>
+                </div>
+
+
+                <!-- 代辦事項 -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[70vh]">
+                    <div class="px-5 py-4 border-b border-gray-100 bg-orange-50/50 flex justify-between items-center">
+                        <h3 class="font-bold text-orange-800 flex items-center gap-2">
+                            <span>✅</span> 代辦事項
+                        </h3>
+                    </div>
+                    <div class="p-4 flex flex-col gap-2 overflow-y-auto flex-1" id="collab-todo-list">
+                        <!-- Items -->
+                    </div>
+                    <div class="p-4 border-t border-gray-100 bg-gray-50 flex gap-2">
+                        <input type="text" id="collab-todo-input" placeholder="新增任務..." class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary" onkeypress="if(event.key === 'Enter') addCollabItem('todo')">
+                        <button onclick="addCollabItem('todo')" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">新增</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -227,6 +400,46 @@
         </div>
     </main>
 
+    <!-- View Report Modal -->
+    <div id="view-report-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-[95vw] max-w-none mx-4 overflow-hidden flex flex-col h-[90vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 id="view-modal-title" class="text-lg font-bold text-gray-900">查看測試報告</h3>
+                <button onclick="closeViewReportModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1 bg-gray-50 flex gap-6">
+                <!-- Left: Raw Ticket -->
+                <div class="flex-1 flex flex-col">
+                    <h4 class="text-sm font-bold text-gray-700 mb-2 flex items-center">
+                        <svg class="w-4 h-4 mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        原始工單內容
+                    </h4>
+                    <textarea id="view-raw-ticket" class="w-full flex-1 p-4 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:outline-none resize-none shadow-sm" readonly></textarea>
+                </div>
+                <!-- Right: Generated Report -->
+                <div class="flex-1 flex flex-col relative">
+                    <div class="flex justify-between items-center mb-2">
+                        <h4 class="text-sm font-bold text-gray-700 flex items-center">
+                            <svg class="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                            測試紀錄內容
+                        </h4>
+                        <button onclick="copyViewReportNotes()" class="text-xs bg-primary text-white px-3 py-1.5 rounded flex items-center hover:bg-blue-600 transition shadow-sm font-medium">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            複製報告
+                        </button>
+                    </div>
+                    <textarea id="view-generated-notes" class="w-full flex-1 p-4 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:outline-none resize-none shadow-sm" readonly></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Modal for New Report with Generator -->
     <div id="report-modal"
         class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
@@ -246,13 +459,40 @@
                 <div class="w-full lg:w-1/2 p-6 overflow-y-auto border-r border-gray-100">
 
                     <div class="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                        <label class="block text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
+                        <label class="block text-sm font-bold text-blue-800 mb-3 flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
-                            第一步：智慧解析工單
+                            第一步：選擇分類與解析工單
                         </label>
+                        
+                        <div class="mb-3">
+                            <label class="block text-sm font-medium text-blue-800 mb-2">分類</label>
+                            <div class="flex flex-wrap gap-2" id="category-group">
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="report_category" value="求職" class="peer hidden" onchange="updateGeneratedResult()">
+                                    <div class="px-3 py-1.5 rounded-full border border-blue-300 text-sm text-blue-600 peer-checked:bg-blue-600 peer-checked:text-white transition font-medium shadow-sm hover:bg-blue-100">求職</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="report_category" value="新求才" class="peer hidden" onchange="updateGeneratedResult()">
+                                    <div class="px-3 py-1.5 rounded-full border border-blue-300 text-sm text-blue-600 peer-checked:bg-blue-600 peer-checked:text-white transition font-medium shadow-sm hover:bg-blue-100">新求才</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="report_category" value="現版求才" class="peer hidden" onchange="updateGeneratedResult()">
+                                    <div class="px-3 py-1.5 rounded-full border border-blue-300 text-sm text-blue-600 peer-checked:bg-blue-600 peer-checked:text-white transition font-medium shadow-sm hover:bg-blue-100">現版求才</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="report_category" value="活動" class="peer hidden" onchange="updateGeneratedResult()">
+                                    <div class="px-3 py-1.5 rounded-full border border-blue-300 text-sm text-blue-600 peer-checked:bg-blue-600 peer-checked:text-white transition font-medium shadow-sm hover:bg-blue-100">活動</div>
+                                </label>
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="report_category" value="其他" class="peer hidden" checked onchange="updateGeneratedResult()">
+                                    <div class="px-3 py-1.5 rounded-full border border-blue-300 text-sm text-blue-600 peer-checked:bg-blue-600 peer-checked:text-white transition font-medium shadow-sm hover:bg-blue-100">其他</div>
+                                </label>
+                            </div>
+                        </div>
+
                         <textarea id="ticket-input" rows="8" placeholder="在此貼上工單內容（如：軟體版本、測試環境...）"
                             class="w-full border border-blue-200 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary text-sm shadow-inner"></textarea>
                     </div>
@@ -273,8 +513,8 @@
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">測試日期</label>
-                                <input type="date" id="form-date"
+                                <label class="block text-sm font-medium text-gray-700 mb-1">測試日期 <span class="text-red-500">*</span></label>
+                                <input type="date" id="form-date" required
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
                             </div>
                         </div>
@@ -317,7 +557,7 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">軟體版本</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">軟體版本 / 版號</label>
                             <textarea id="form-version" rows="2" placeholder="例如：前端: stg-xxx&#10;後端: qa-yyy"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
                         </div>
@@ -546,7 +786,7 @@
                             </button>
                         </div>
                     </div>
-                    <textarea id="generated-result" readonly
+                    <textarea id="generated-result"
                         class="flex-grow w-full border border-gray-200 rounded-lg p-4 bg-white text-gray-800 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary shadow-inner min-h-[300px] leading-relaxed"></textarea>
                 </div>
             </div>
@@ -626,7 +866,7 @@
     <!-- Modal for Trash/Recycle Bin -->
     <div id="trash-modal"
         class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
             <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-red-50">
                 <h3 class="text-lg font-bold text-red-800 flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -643,7 +883,7 @@
             
             <div class="p-6 overflow-y-auto flex-grow">
                 <p class="text-xs text-gray-500 mb-4">💡 說明：普通測試員在此僅能查看自己被刪除的報告；管理員可查看並復原所有人的報告。已軟刪除的報告可在此「復原」至主列表，或執行「永久刪除」。</p>
-                <div class="bg-white rounded-lg border border-gray-100 overflow-hidden shadow-inner">
+                <div class="bg-white rounded-lg border border-gray-100 overflow-x-auto shadow-inner">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
@@ -670,7 +910,32 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Modal for Summary Report -->
+    <div id="summary-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2" id="summary-modal-title">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    報表摘要
+                </h3>
+                <button onclick="document.getElementById('summary-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 flex-grow overflow-y-auto">
+                <p class="text-sm text-gray-500 mb-2">您可以直接複製以下內容：</p>
+                <textarea id="summary-result" rows="15" class="w-full border border-gray-200 rounded-lg p-4 bg-gray-50 text-gray-800 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary shadow-inner leading-relaxed"></textarea>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                <button onclick="document.getElementById('summary-modal').classList.add('hidden')" class="text-gray-600 hover:bg-gray-200 px-6 py-2 rounded-lg font-medium transition mr-2">關閉</button>
+                <button onclick="copySummary()" class="bg-primary hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow-sm transition">一鍵複製</button>
+            </div>
+        </div>
+    <!-- Scripts -->
+    <script src="app.js?v=20260602_1"></script>
 </body>
 
 </html>

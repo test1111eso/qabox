@@ -42,8 +42,8 @@
 
 /* Status Badge Styles */
 .status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
     font-size: 0.75rem;
     font-weight: 600;
     display: inline-flex;
