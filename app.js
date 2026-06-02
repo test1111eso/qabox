@@ -1819,3 +1819,21 @@ function copyViewReportNotes() {
         showToast('複製失敗，請手動複製', true);
     }
 }
+
+function copyTicketTemplate() {
+    const template = `【測試項目】\n測試日期：\n工程人員：\n軟體版本：\n測試環境：\n測試母單：\n測試子單：\n工單內容：`;
+    
+    const tempTextarea = document.createElement('textarea');
+    tempTextarea.value = template;
+    document.body.appendChild(tempTextarea);
+    tempTextarea.select();
+    
+    try {
+        document.execCommand('copy');
+        showToast('已複製工單範本！');
+    } catch (err) {
+        showToast('複製失敗', true);
+    } finally {
+        document.body.removeChild(tempTextarea);
+    }
+}
