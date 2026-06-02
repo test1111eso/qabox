@@ -496,6 +496,48 @@ export default {
         });
       }
 
+      // Bulletins - Get All
+      if (url.pathname === '/api/collab/bulletins' && request.method === 'GET') {
+        const { results } = await env.DB.prepare('SELECT * FROM bulletins ORDER BY created_at DESC').all();
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Bulletins - Create
+      if (url.pathname === '/api/collab/bulletins' && request.method === 'POST') {
+        const body = await request.json();
+        const { token, content } = body;
+        
+        const user = await getUserByToken(token, env);
+        if (!user) {
+          return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
+        }
+        
+        const result = await env.DB.prepare('INSERT INTO bulletins (content, author) VALUES (?, ?)')
+          .bind(content, user.display_name)
+          .run();
+          
+        return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Bulletins - Delete
+      if (url.pathname.startsWith('/api/collab/bulletins/') && request.method === 'DELETE') {
+        const id = url.pathname.split('/').pop();
+        const body = await request.json();
+        const { token } = body;
+        
+        const user = await getUserByToken(token, env);
+        if (!user) {
+          return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
+        }
+        
+        await env.DB.prepare('DELETE FROM bulletins WHERE id = ?').bind(id).run();
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       return new Response('Not Found', { status: 404, headers: corsHeaders });
     } catch (err) {
       return new Response(err.message, { status: 500, headers: corsHeaders });
