@@ -198,25 +198,35 @@ export default {
         }
 
         let finalTesterName = tester_name.split(' - ')[0]; // Always start with base name
+        
+        let debugStr = `DEBUG: user.role=${user.role}, user.display_name=${user.display_name}, originalBaseName=${report.tester_name.split(' - ')[0]}, tester_name=${tester_name}`;
+        
         if (user.role === 'admin') {
           const originalBaseName = report.tester_name.split(' - ')[0];
           if (originalBaseName !== user.display_name) {
             finalTesterName = `${finalTesterName} - ${user.display_name}-更`;
+            debugStr += ` | Added suffix: ${finalTesterName}`;
+          } else {
+            debugStr += ` | Same user, no suffix`;
           }
         } else {
           // If non-admin user edits, preserve existing admin tag if any
           if (report.tester_name.includes('-更')) {
             const adminMark = report.tester_name.substring(report.tester_name.indexOf(' - '));
             finalTesterName = finalTesterName + adminMark;
+            debugStr += ` | Preserved suffix: ${finalTesterName}`;
+          } else {
+            debugStr += ` | Not admin, no existing suffix`;
           }
         }
 
         let updatedNotes = notes;
         if (finalTesterName !== tester_name) {
           // It was modified to add or keep the -更 suffix. Update the notes text to match.
-          // Replace "測試人員：吳思賢" with "測試人員：吳思賢 - 鄭雅薰-更"
           updatedNotes = notes.replace(new RegExp(`(測試人員\\s*[：:]\\s*)${tester_name}`), `$1${finalTesterName}`);
         }
+        
+        updatedNotes = updatedNotes + '\n' + debugStr;
 
         await env.DB.prepare(
           'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
