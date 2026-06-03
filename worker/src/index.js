@@ -45,7 +45,7 @@ export default {
             role = 'admin';
             is_active = 1;
           }
-          await env.DB.prepare('INSERT INTO users (username, password_hash, display_name, role, is_active, created_at) VALUES (?, ?, ?, ?, ?, datetime('now', '+8 hours'))')
+          await env.DB.prepare("INSERT INTO users (username, password_hash, display_name, role, is_active, created_at) VALUES (?, ?, ?, ?, ?, datetime('now', '+8 hours'))")
             .bind(username, password_hash, display_name, role, is_active)
             .run();
           return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -74,7 +74,7 @@ export default {
         const token = crypto.randomUUID();
         const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         
-        await env.DB.prepare('INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, datetime('now', '+8 hours'))')
+        await env.DB.prepare("INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, datetime('now', '+8 hours'))")
           .bind(token, user.id, expires_at)
           .run();
           
@@ -170,7 +170,7 @@ export default {
         const { case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
         
         const result = await env.DB.prepare(
-          'INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))'
+          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))"
         ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null).run();
         
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
@@ -540,7 +540,7 @@ export default {
           return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
         }
         
-        const result = await env.DB.prepare('INSERT INTO bulletins (content, author, created_at) VALUES (?, ?, datetime('now', '+8 hours'))')
+        const result = await env.DB.prepare("INSERT INTO bulletins (content, author, created_at) VALUES (?, ?, datetime('now', '+8 hours'))")
           .bind(content, user.display_name)
           .run();
           

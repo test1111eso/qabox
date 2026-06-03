@@ -5,9 +5,14 @@
   "observability": {
     "enabled": true
   },
-  "assets": {
-    "directory": "."
-  },
+  "main": "worker/src/index.js",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "qabox",
+      "database_id": "46ea2bc8-2fb3-4ade-90d0-0277d790a66f"
+    }
+  ],
   "compatibility_flags": [
     "nodejs_compat"
   ]
