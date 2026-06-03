@@ -99,6 +99,7 @@ export default {
         const date = url.searchParams.get('date');
         const start_date = url.searchParams.get('start_date');
         const end_date = url.searchParams.get('end_date');
+        const statusParam = url.searchParams.get('status');
         
         let query = 'SELECT * FROM reports WHERE is_deleted = 0';
         let params = [];
@@ -106,6 +107,10 @@ export default {
         if (tester && tester !== 'all') {
           query += ' AND (tester_name = ? OR tester_name LIKE ? OR tester_name LIKE ?)';
           params.push(tester, `${tester} - %-更`, `% - ${tester}-更`);
+        }
+        if (statusParam) {
+          query += ' AND status = ?';
+          params.push(statusParam);
         }
         if (date) {
           query += ' AND test_date = ?';

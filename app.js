@@ -589,9 +589,11 @@ async function loadDashboard() {
         // Update Summary Cards
         let total = 0;
         let blocked = 0;
+        let fail = 0;
         data.statusStats.forEach(s => {
             total += s.count;
             if (s.status === 'Blocked') blocked = s.count;
+            if (s.status === 'Fail') fail = s.count;
         });
 
         const hasFilter = !!(start_date || end_date);
@@ -612,6 +614,8 @@ async function loadDashboard() {
 
         document.getElementById('stat-total').textContent = data.monthTotal || 0;
         document.getElementById('stat-blocked').textContent = blocked;
+        const failDashEl = document.getElementById('stat-fail-dash');
+        if (failDashEl) failDashEl.textContent = fail;
         
         if (data.typeStats) {
             document.getElementById('stat-t-count').textContent = data.typeStats.t_count || 0;
@@ -679,6 +683,8 @@ async function showDashboardDetails(type) {
         let url = `${API_BASE}/api/reports?`;
         if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
         if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
+        if (type === 'blocked') url += `status=Blocked&`;
+        if (type === 'fail') url += `status=Fail&`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error('無法取得案件資料');
@@ -712,7 +718,10 @@ async function showDashboardDetails(type) {
             });
         } else if (type === 'blocked') {
             title = '阻礙中 (Blocked) 案件清單';
-            filtered = data.filter(r => r.status === 'Blocked');
+            filtered = data; // API已篩選
+        } else if (type === 'fail') {
+            title = '測試失敗 (Fail) 案件清單';
+            filtered = data; // API已篩選
         }
         
         titleEl.textContent = title;
@@ -1119,6 +1128,7 @@ async function submitReport(e) {
         closeModal();
         fetchReports(); // Refresh table
         loadDashboard(); // Refresh stats
+        loadWorkspace(); // Refresh workspace (最近測試紀錄)
     } catch (err) {
         console.error(err);
         showToast(err.message, true);
@@ -2144,6 +2154,7 @@ function renderWorkspaceTable() {
     
     if (start || end) {
         filteredData = filteredData.filter(r => {
+            if (r.is_pinned === 1) return true;
             if (!r.test_date) return false;
             if (start && r.test_date < start) return false;
             if (end && r.test_date > end) return false;
@@ -2152,11 +2163,11 @@ function renderWorkspaceTable() {
     }
     
     const typeVal = document.getElementById('ws-filter-type') ? document.getElementById('ws-filter-type').value : 'all';
-    if (typeVal === 'P') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('P'));
-    if (typeVal === 'T') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('T'));
+    if (typeVal === 'P') filteredData = filteredData.filter(r => r.is_pinned === 1 || (r.case_no && r.case_no.startsWith('P')));
+    if (typeVal === 'T') filteredData = filteredData.filter(r => r.is_pinned === 1 || (r.case_no && r.case_no.startsWith('T')));
     
     const catVal = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
-    if (catVal !== 'all') filteredData = filteredData.filter(r => r.category === catVal);
+    if (catVal !== 'all') filteredData = filteredData.filter(r => r.is_pinned === 1 || r.category === catVal);
 
     if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
@@ -2485,6 +2496,18 @@ document.addEventListener('click', function(e) {
     }
 });
 
+
+function clearWorkspaceDate() {
+    document.getElementById('ws-filter-date-start').value = getTaiwanToday();
+    document.getElementById('ws-filter-date-end').value = getTaiwanToday();
+    filterWorkspaceReports();
+    
+    // 將日曆切換回本月並重新渲染以更新亮點
+    const now = new Date();
+    wsCurrentYear = now.getFullYear();
+    wsCurrentMonth = now.getMonth() + 1;
+    renderWorkspaceCalendar(currentReportsList, wsCurrentYear, wsCurrentMonth);
+}
 
 function filterWorkspaceReports() {
     wsCurrentPage = 1;

@@ -220,6 +220,8 @@
                             <span class="text-gray-400">-</span>
                             <input type="date" id="ws-filter-date-end" onchange="filterWorkspaceReports()"
                                 class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
+                            <button onclick="clearWorkspaceDate()" class="text-sm text-gray-500 hover:text-primary transition bg-white hover:bg-gray-100 px-3 py-1 rounded border border-gray-300 shadow-sm ml-1">清除</button>
+
 
                             <select id="ws-filter-type" onchange="renderWorkspaceTable()"
                                 class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary ml-auto">
@@ -330,7 +332,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
                     <!-- Summary Cards -->
                     <div onclick="showDashboardDetails('month')"
                         class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition">
@@ -348,9 +350,14 @@
                         <p class="text-2xl font-bold text-purple-600" id="stat-p-count">0</p>
                     </div>
                     <div onclick="showDashboardDetails('blocked')"
-                        class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md hover:border-red-300 hover:bg-red-50 cursor-pointer transition">
+                        class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md hover:border-yellow-400 hover:bg-yellow-50 cursor-pointer transition">
                         <h3 class="text-xs font-medium text-gray-500 mb-1">阻礙中 (Blocked)</h3>
-                        <p class="text-2xl font-bold text-red-500" id="stat-blocked">0</p>
+                        <p class="text-2xl font-bold text-yellow-500" id="stat-blocked">0</p>
+                    </div>
+                    <div onclick="showDashboardDetails('fail')"
+                        class="bg-white rounded-xl shadow-sm p-5 border border-gray-100 hover:shadow-md hover:border-red-300 hover:bg-red-50 cursor-pointer transition">
+                        <h3 class="text-xs font-medium text-gray-500 mb-1">測試失敗 (Fail)</h3>
+                        <p class="text-2xl font-bold text-red-500" id="stat-fail-dash">0</p>
                     </div>
                 </div>
 
@@ -1362,7 +1369,7 @@
             </div>
         </div>
         <!-- Scripts -->
-        <script src="app.js?v=20260603_2"></script>
+        <script src="app.js?v=20260603_6"></script>
 </body>
 
 </html>
