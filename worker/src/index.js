@@ -474,13 +474,15 @@ export default {
 
         const testerQuery = `
           SELECT 
-            tester_name, 
-            COUNT(*) as total_count,
-            SUM(CASE WHEN test_date = ? THEN 1 ELSE 0 END) as today_count,
-            SUM(CASE WHEN test_date >= ? AND test_date <= ? THEN 1 ELSE 0 END) as month_count
-          FROM reports 
-          WHERE is_deleted = 0 
-          GROUP BY tester_name 
+            r.tester_name, 
+            COUNT(r.id) as total_count,
+            SUM(CASE WHEN r.test_date = ? THEN 1 ELSE 0 END) as today_count,
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? THEN 1 ELSE 0 END) as month_count,
+            COALESCE(MAX(u.is_active), 0) as is_active
+          FROM reports r
+          LEFT JOIN users u ON r.tester_name = u.display_name
+          WHERE r.is_deleted = 0 
+          GROUP BY r.tester_name 
           ORDER BY month_count DESC, today_count DESC
         `;
         const testerStats = await env.DB.prepare(testerQuery).bind(todayStr, monthStartStr, todayStr).all();

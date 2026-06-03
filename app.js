@@ -5,10 +5,13 @@ let dailyChartInstance = null;
 let statusChartInstance = null;
 let testerChartInstance = null;
 let currentReportsList = [];
+let wsCurrentYear = new Date().getFullYear();
+let wsCurrentMonth = new Date().getMonth() + 1;
 let currentReportMode = 'normal';
 let userEditedFields = new Set();
 let wsCurrentPage = 1;
 let reportsCurrentPage = 1;
+let currentTesterStats = [];
 const ITEMS_PER_PAGE = 20;
 
 
@@ -273,52 +276,14 @@ async function loadWorkspace() {
         document.getElementById('ws-stat-month').textContent = monthCount;
         document.getElementById('ws-stat-fail').textContent = failCount;
 
-        const tbody = document.getElementById('ws-recent-reports-body');
-        tbody.innerHTML = '';
         
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
-            return;
-        }
-
-        const recentReports = data.slice(0, 20); // 取前 20 筆
+        const startInput = document.getElementById('ws-filter-date-start');
+        const endInput = document.getElementById('ws-filter-date-end');
+        if (startInput && !startInput.value) startInput.value = twToday;
+        if (endInput && !endInput.value) endInput.value = twToday;
         
-        const currentUser = localStorage.getItem('qa_display_name');
-        const currentUserRole = localStorage.getItem('qa_role') || 'user';
-
-        recentReports.forEach(report => {
-            const tr = document.createElement('tr');
-            
-            const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
-            
-            let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
-            if (canModify) {
-                actionButtonsHtml += `
-                    <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
-                    <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
-                `;
-            }
-
-            const isPinned = report.is_pinned === 1;
-            const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-            const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
-
-            tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${getCategoryTagHtml(report.category)}
-                    ${escapeHtml(report.project_name)}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="status-badge status-${report.status}">${report.status}</span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
-                    ${actionButtonsHtml}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
+        renderWorkspaceCalendar(data, wsCurrentYear, wsCurrentMonth);
+        filterWorkspaceReports();
     } catch (err) {
         console.error(err);
         const tbody = document.getElementById('ws-recent-reports-body');
@@ -608,26 +573,68 @@ async function loadDashboard() {
         renderCharts(data.dailyStats, data.statusStats);
 
         // Render Tester Stats
-        renderTesterStats(data.testerStats || []);
+        currentTesterStats = data.testerStats || [];
+        renderTesterCheckboxes(currentTesterStats);
+        renderTesterStats();
     } catch (err) {
         console.error(err);
         // showToast('載入儀表板資料失敗', true); // 開發階段暫時關閉錯誤提示以免沒有開 server 時彈出
     }
 }
 
-function renderTesterStats(testerStats) {
+function renderTesterCheckboxes(testerStats) {
+    const group = document.getElementById('tester-checkbox-group');
+    if (!group) return;
+    
+    let html = '';
+    testerStats.forEach(t => {
+        // 如果 API 沒有回傳 is_active，我們預設為 1；若回傳 0 則代表停用
+        const isActive = t.is_active !== 0;
+        const checked = isActive ? 'checked' : '';
+        
+        // 已離職打個標記，文字顏色淡一點
+        const labelClass = isActive ? 'text-gray-700' : 'text-gray-400 line-through';
+        const tag = isActive ? '' : '<span class="text-[10px] bg-gray-200 text-gray-500 px-1 rounded ml-1 border border-gray-300">離職</span>';
+        
+        html += `
+            <label class="flex items-center cursor-pointer px-4 py-2 hover:bg-gray-50 transition text-sm">
+                <input type="checkbox" class="tester-filter-chk w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                       value="${escapeHtml(t.tester_name)}" ${checked} onchange="renderTesterStats()">
+                <span class="ml-3 font-medium ${labelClass}">${escapeHtml(t.tester_name)}${tag}</span>
+            </label>
+        `;
+    });
+    group.innerHTML = html;
+}
+
+function renderTesterStats() {
     const tbody = document.getElementById('tester-stats-body');
     if (!tbody) return;
 
-    if (!testerStats || testerStats.length === 0) {
+    if (!currentTesterStats || currentTesterStats.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">目前無資料</td></tr>';
+        return;
+    }
+    
+    // 取得有勾選的測試員
+    const checkedNodes = document.querySelectorAll('.tester-filter-chk:checked');
+    const checkedTesters = Array.from(checkedNodes).map(cb => cb.value);
+
+    const countSpan = document.getElementById('tester-selected-count');
+    if (countSpan) countSpan.textContent = checkedTesters.length;
+
+    // 過濾資料
+    const filteredStats = currentTesterStats.filter(t => checkedTesters.includes(t.tester_name));
+
+    if (filteredStats.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">請勾選要顯示的測試員</td></tr>';
         return;
     }
 
     const currentUser = localStorage.getItem('qa_display_name') || '';
 
     // 先排序：自己優先，其次依本月件數降冪，再依今日件數降冪
-    const sorted = [...testerStats].sort((a, b) => {
+    const sorted = [...filteredStats].sort((a, b) => {
         if (a.tester_name === currentUser) return -1;
         if (b.tester_name === currentUser) return 1;
         if (b.month_count !== a.month_count) {
@@ -2105,4 +2112,170 @@ function copyTicketTemplate() {
         console.error('複製失敗:', err);
         showToast('複製失敗', true);
     });
+}
+
+
+// Dropdown Logic for Tester Stats
+function toggleTesterDropdown(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    const menu = document.getElementById('tester-dropdown-menu');
+    if (menu) {
+        menu.classList.toggle('hidden');
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const btn = document.getElementById('tester-dropdown-btn');
+    const menu = document.getElementById('tester-dropdown-menu');
+    if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.classList.add('hidden');
+    }
+});
+
+
+function renderWorkspaceTableRows(reports) {
+    const tbody = document.getElementById('ws-recent-reports-body');
+    tbody.innerHTML = '';
+    
+    if (!reports || reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">此日期無測試紀錄</td></tr>';
+        return;
+    }
+
+    const currentUser = localStorage.getItem('qa_display_name');
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+
+    reports.forEach(report => {
+        const tr = document.createElement('tr');
+        
+        const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
+        
+        let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
+        if (canModify) {
+            actionButtonsHtml += `
+                <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
+                <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
+            `;
+        }
+
+        const isPinned = report.is_pinned === 1;
+        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
+        const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
+
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                ${getCategoryTagHtml(report.category)}
+                ${escapeHtml(report.project_name)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="status-badge status-${report.status}">${report.status}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
+                ${actionButtonsHtml}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function filterWorkspaceReports() {
+    const startInput = document.getElementById('ws-filter-date-start');
+    const endInput = document.getElementById('ws-filter-date-end');
+    if (!startInput || !endInput) return;
+    
+    const start = startInput.value;
+    const end = endInput.value;
+    
+    if (!start && !end) {
+        renderWorkspaceTableRows(currentReportsList.slice(0, 20));
+        return;
+    }
+    
+    const filtered = currentReportsList.filter(r => {
+        if (!r.test_date) return false;
+        if (start && r.test_date < start) return false;
+        if (end && r.test_date > end) return false;
+        return true;
+    });
+    
+    renderWorkspaceTableRows(filtered);
+}
+
+function changeWorkspaceCalendarMonth(delta) {
+    wsCurrentMonth += delta;
+    if (wsCurrentMonth > 12) {
+        wsCurrentMonth = 1;
+        wsCurrentYear++;
+    } else if (wsCurrentMonth < 1) {
+        wsCurrentMonth = 12;
+        wsCurrentYear--;
+    }
+    renderWorkspaceCalendar(currentReportsList, wsCurrentYear, wsCurrentMonth);
+}
+
+function renderWorkspaceCalendar(reports, year, month) {
+    const title = document.getElementById('ws-calendar-title');
+    const grid = document.getElementById('ws-calendar-grid');
+    if (!title || !grid) return;
+    
+    title.textContent = `${year} 年 ${month} 月 測試狀況`;
+    
+    // Group reports by date string (YYYY-MM-DD)
+    const counts = {};
+    reports.forEach(r => {
+        if (!r.test_date) return;
+        counts[r.test_date] = (counts[r.test_date] || 0) + 1;
+    });
+
+    // Calendar logic
+    const firstDay = new Date(year, month - 1, 1).getDay(); // 0 is Sunday
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
+    const twToday = getTaiwanToday();
+    const startInput = document.getElementById('ws-filter-date-start');
+    const endInput = document.getElementById('ws-filter-date-end');
+    const start = startInput ? startInput.value : twToday;
+    const end = endInput ? endInput.value : twToday;
+
+    let html = '';
+    
+    // Empty cells before 1st
+    for (let i = 0; i < firstDay; i++) {
+        html += `<div class="h-16 rounded bg-gray-50 border border-gray-100 opacity-50"></div>`;
+    }
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${month.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+        const count = counts[dateStr] || 0;
+        
+        const isToday = dateStr === twToday;
+        // Only show blue ring if the exact single day is selected on both start and end
+        const isSelected = (dateStr === start && dateStr === end);
+        
+        let cellClass = "h-16 rounded border flex flex-col items-center justify-center cursor-pointer transition ";
+        if (isSelected) {
+            cellClass += "bg-blue-50 border-blue-400 ring-1 ring-blue-400";
+        } else if (isToday) {
+            cellClass += "bg-yellow-50 border-yellow-300 hover:bg-yellow-100";
+        } else {
+            cellClass += "bg-white border-gray-100 hover:bg-gray-50 hover:border-gray-300";
+        }
+        
+        let countHtml = count > 0 ? `<span class="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded-full mt-1">${count} 件</span>` : '<span class="text-xs text-transparent mt-1">-</span>';
+        
+        html += `
+            <div class="${cellClass}" onclick="document.getElementById('ws-filter-date-start').value='${dateStr}'; document.getElementById('ws-filter-date-end').value='${dateStr}'; filterWorkspaceReports(); renderWorkspaceCalendar(currentReportsList, ${year}, ${month});">
+                <span class="text-sm font-semibold ${isToday ? 'text-primary' : 'text-gray-700'}">${d}</span>
+                ${countHtml}
+            </div>
+        `;
+    }
+    
+    grid.innerHTML = html;
 }
