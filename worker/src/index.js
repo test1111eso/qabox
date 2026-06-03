@@ -197,9 +197,20 @@ export default {
           return new Response(JSON.stringify({ error: '您無權修改其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
+        let finalTesterName = tester_name;
+        if (user.role === 'admin') {
+          const originalBaseName = report.tester_name.split(' - ')[0];
+          if (originalBaseName !== user.display_name) {
+            const submittedBaseName = tester_name.split(' - ')[0];
+            finalTesterName = `${submittedBaseName} - ${user.display_name}-更`;
+          } else {
+            finalTesterName = tester_name.split(' - ')[0];
+          }
+        }
+
         await env.DB.prepare(
           'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, id).run();
+        ).bind(case_no, project_name, finalTesterName, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, id).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
