@@ -670,6 +670,8 @@ async function showDashboardDetails(type) {
         if (!res.ok) throw new Error('無法取得案件資料');
         const data = await res.json();
         
+        currentReportsList = data; // 存入全域供 viewReportDetails 使用
+        
         const twToday = getTaiwanToday();
         const twFirstDay = getTaiwanFirstDay();
         
