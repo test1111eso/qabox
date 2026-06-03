@@ -193,7 +193,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權修改其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
@@ -231,7 +231,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權釘選其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
         
@@ -256,7 +256,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權刪除其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
         
@@ -295,7 +295,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權復原其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
@@ -319,7 +319,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name) {
+        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權永久刪除其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
