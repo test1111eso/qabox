@@ -197,14 +197,17 @@ export default {
           return new Response(JSON.stringify({ error: '您無權修改其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
-        let finalTesterName = tester_name;
+        let finalTesterName = tester_name.split(' - ')[0]; // Always start with base name
         if (user.role === 'admin') {
           const originalBaseName = report.tester_name.split(' - ')[0];
           if (originalBaseName !== user.display_name) {
-            const submittedBaseName = tester_name.split(' - ')[0];
-            finalTesterName = `${submittedBaseName} - ${user.display_name}-更`;
-          } else {
-            finalTesterName = tester_name.split(' - ')[0];
+            finalTesterName = `${finalTesterName} - ${user.display_name}-更`;
+          }
+        } else {
+          // If non-admin user edits, preserve existing admin tag if any
+          if (report.tester_name.includes('-更')) {
+            const adminMark = report.tester_name.substring(report.tester_name.indexOf(' - '));
+            finalTesterName = finalTesterName + adminMark;
           }
         }
 
