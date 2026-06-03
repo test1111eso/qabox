@@ -134,8 +134,8 @@ function toggleAuthMode() {
         nameGroup.classList.remove('hidden');
         nameInput.required = true;
     } else {
-        title.innerText = '登入系統';
-        subtitle.innerText = '歡迎回來，請登入您的帳號';
+        title.innerText = 'Q-Draft';
+        subtitle.innerText = '讓測試報告，一鍵成稿';
         btn.innerText = '登入';
         toggleText.innerText = '還沒有帳號嗎？';
         toggleBtn.innerText = '點此註冊';
@@ -346,18 +346,17 @@ function generateReportSummary(type) {
         return r.test_date.startsWith(prefix);
     });
 
-    if (filtered.length === 0) {
-        showToast('找不到符合該日期的測試紀錄', true);
-        return;
-    }
-
     // 將資料依日期/案號反轉為正序 (因為 API 預設是倒序)
     const sorted = [...filtered].reverse();
 
     let text = '';
-    sorted.forEach((r, idx) => {
-        text += `${idx + 1}. ${r.project_name}\n`;
-    });
+    if (sorted.length === 0) {
+        text = '沒產值還敢偷懶阿 (⑉･̆-･̆⑉)';
+    } else {
+        sorted.forEach((r, idx) => {
+            text += `${idx + 1}. ${r.project_name}\n`;
+        });
+    }
 
     document.getElementById('summary-result').value = text;
     document.getElementById('summary-modal-title').innerHTML = `

@@ -35,12 +35,13 @@
                 <div class="flex items-center justify-between h-16">
                     <div class="flex items-center gap-3">
                         <!-- Icon placeholder -->
-                        <svg class="w-8 h-8 text-primary cursor-pointer hover:opacity-80 transition" onclick="forceClearCache()" title="點擊清除快取並重新載入" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
+                        <svg class="w-8 h-8 text-primary cursor-pointer hover:opacity-80 transition"
+                            onclick="forceClearCache()" title="點擊清除快取並重新載入" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
-                        <span class="font-bold text-xl tracking-wide">QA 系統</span>
+                        <span class="font-bold text-xl tracking-wide">Q-Draft 除草室</span>
                     </div>
                     <div class="flex gap-4">
                         <button onclick="switchView('dashboard')"
@@ -170,7 +171,8 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
-                            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl shadow-sm p-5 border border-indigo-200">
+                            <div
+                                class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl shadow-sm p-5 border border-indigo-200">
                                 <div class="flex justify-between items-start">
                                     <div>
                                         <h3 class="text-sm font-bold text-indigo-800 mb-1">本月測試</h3>
@@ -178,7 +180,8 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-sm p-5 border border-purple-200">
+                            <div
+                                class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-sm p-5 border border-purple-200">
                                 <div class="flex justify-between items-start">
                                     <div>
                                         <h3 class="text-sm font-bold text-purple-800 mb-1">本月上正式</h3>
@@ -270,10 +273,15 @@
                 </div>
 
                 <!-- Workspace Admin Modified Reports -->
-                <div id="ws-admin-modified-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-8 hidden">
+                <div id="ws-admin-modified-container"
+                    class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-8 hidden">
                     <div class="px-6 py-4 border-b border-gray-100 bg-red-50 flex items-center justify-between">
                         <h3 class="text-lg font-bold text-red-800 flex items-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z">
+                                </path>
+                            </svg>
                             管理員修改紀錄
                         </h3>
                     </div>
@@ -281,10 +289,18 @@
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50 sticky top-0 shadow-sm">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">案件編號</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">專案</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">測試員</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        案件編號</th>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        專案</th>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        測試員</th>
+                                    <th
+                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        操作</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200" id="ws-admin-modified-body">
@@ -434,17 +450,25 @@
                                     <th
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         測試員</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        今日<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 / 上正式</span>
+                                    <th
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        今日<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 /
+                                            上正式</span>
                                     </th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        本週<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 / 上正式</span>
+                                    <th
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        本週<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 /
+                                            上正式</span>
                                     </th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        本月<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 / 上正式</span>
+                                    <th
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        本月<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 /
+                                            上正式</span>
                                     </th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        累計<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 / 上正式</span>
+                                    <th
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        累計<br><span class="text-[10px] font-normal text-gray-400 mt-1 inline-block">測試 /
+                                            上正式</span>
                                     </th>
                                 </tr>
                             </thead>
@@ -1188,14 +1212,11 @@
         <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
             <div class="text-center mb-8">
                 <div
-                    class="inline-flex items-center justify-center w-12 h-12 bg-primary/10 rounded-xl mb-4 text-primary">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-                    </svg>
+                    class="inline-flex items-center justify-center w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-sm border border-gray-100">
+                    <img src="qaicon.jpg" alt="Q-Draft Logo" class="w-full h-full object-cover">
                 </div>
-                <h2 class="text-2xl font-bold text-gray-900" id="auth-title">登入系統</h2>
-                <p class="text-sm text-gray-500 mt-2" id="auth-subtitle">歡迎回來，請登入您的帳號</p>
+                <h3 class="text-3xl font-bold text-gray-900 tracking-tight" id="auth-title">Q-Draft </h3>
+                <p class="text-sm text-gray-500 mt-2 font-medium" id="auth-subtitle">歡迎回來，請登入您的帳密</p>
             </div>
 
             <form id="auth-form" class="space-y-5" onsubmit="handleAuthSubmit(event)">
@@ -1341,7 +1362,7 @@
             </div>
         </div>
         <!-- Scripts -->
-        <script src="app.js?v=20260603_1"></script>
+        <script src="app.js?v=20260603_2"></script>
 </body>
 
 </html>
