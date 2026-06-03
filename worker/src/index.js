@@ -211,9 +211,16 @@ export default {
           }
         }
 
+        let updatedNotes = notes;
+        if (finalTesterName !== tester_name) {
+          // It was modified to add or keep the -更 suffix. Update the notes text to match.
+          // Replace "測試人員：吳思賢" with "測試人員：吳思賢 - 鄭雅薰-更"
+          updatedNotes = notes.replace(new RegExp(`(測試人員\\s*[：:]\\s*)${tester_name}`), `$1${finalTesterName}`);
+        }
+
         await env.DB.prepare(
           'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
-        ).bind(case_no, project_name, finalTesterName, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, id).run();
+        ).bind(case_no, project_name, finalTesterName, test_date, status, bug_link, updatedNotes, category || '其他', raw_ticket || null, id).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
