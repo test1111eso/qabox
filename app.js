@@ -1684,7 +1684,7 @@ async function fetchTrashReports() {
         
         data.forEach(report => {
             const tr = document.createElement('tr');
-            const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
+            const canModify = (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
             
             let actionsHtml = '';
             if (canModify) {
@@ -1980,7 +1980,7 @@ function renderWorkspaceTable() {
     paginatedData.forEach(report => {
         const tr = document.createElement('tr');
         
-        const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
+        const canModify = (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
         
         let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
         if (canModify) {

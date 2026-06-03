@@ -104,8 +104,8 @@ export default {
         let params = [];
         
         if (tester && tester !== 'all') {
-          query += ' AND tester_name = ?';
-          params.push(tester);
+          query += ' AND (tester_name = ? OR tester_name LIKE ?)';
+          params.push(tester, `${tester} - %-更`);
         }
         if (date) {
           query += ' AND test_date = ?';
