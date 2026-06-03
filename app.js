@@ -222,14 +222,29 @@ async function handleLogout() {
         } catch(e) {}
     }
     
-    localStorage.removeItem('qa_session_token');
-    localStorage.removeItem('qa_display_name');
-    localStorage.removeItem('qa_role');
+    forceClearCache(true);
+}
+
+async function forceClearCache(silent = false) {
+    if (!silent && !confirm('確定要清除快取並重新載入網頁嗎？這將會讓您重新登入。')) {
+        return;
+    }
     
-    const navUsers = document.getElementById('nav-users');
-    if (navUsers) navUsers.classList.add('hidden');
+    // 清除 LocalStorage (包含登入資訊、設定等)
+    localStorage.clear();
+    sessionStorage.clear();
     
-    checkAuth();
+    if ('caches' in window) {
+        try {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(key => caches.delete(key)));
+        } catch (e) {
+            console.error('caches clear error', e);
+        }
+    }
+    
+    // 強制重新載入頁面，加上 timestamp 參數避免讀取到瀏覽器快取的 index.html 或 app.js
+    window.location.href = window.location.pathname + '?v=' + new Date().getTime();
 }
 
 // View Navigation
