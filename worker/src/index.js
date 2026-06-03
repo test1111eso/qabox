@@ -104,8 +104,8 @@ export default {
         let params = [];
         
         if (tester && tester !== 'all') {
-          query += ' AND (tester_name = ? OR tester_name LIKE ?)';
-          params.push(tester, `${tester} - %-更`);
+          query += ' AND (tester_name = ? OR tester_name LIKE ? OR tester_name LIKE ?)';
+          params.push(tester, `${tester} - %-更`, `% - ${tester}-更`);
         }
         if (date) {
           query += ' AND test_date = ?';
@@ -496,20 +496,57 @@ export default {
 
 
 
+        const day = twDate.getDay();
+        const diff = twDate.getDate() - day + (day === 0 ? -6 : 1);
+        const weekStartDate = new Date(twDate.setDate(diff));
+        const w_yyyy = weekStartDate.getFullYear();
+        const w_mm = String(weekStartDate.getMonth() + 1).padStart(2, '0');
+        const w_dd = String(weekStartDate.getDate()).padStart(2, '0');
+        const weekStartStr = `${w_yyyy}-${w_mm}-${w_dd}`;
+
+        let testerQueryBase = '';
+        let testerParams = [];
+        if (start_date) {
+            testerQueryBase += ' AND r.test_date >= ?';
+            testerParams.push(start_date);
+        }
+        if (end_date) {
+            testerQueryBase += ' AND r.test_date <= ?';
+            testerParams.push(end_date);
+        }
+
         const testerQuery = `
           SELECT 
-            r.tester_name, 
+            CASE WHEN INSTR(r.tester_name, ' - ') > 0 THEN SUBSTR(r.tester_name, 1, INSTR(r.tester_name, ' - ') - 1) ELSE r.tester_name END as tester_name, 
             COUNT(r.id) as total_count,
+            SUM(CASE WHEN r.case_no LIKE 'T%' THEN 1 ELSE 0 END) as total_t,
+            SUM(CASE WHEN r.case_no LIKE 'P%' THEN 1 ELSE 0 END) as total_p,
+
             SUM(CASE WHEN r.test_date = ? THEN 1 ELSE 0 END) as today_count,
+            SUM(CASE WHEN r.test_date = ? AND r.case_no LIKE 'T%' THEN 1 ELSE 0 END) as today_t,
+            SUM(CASE WHEN r.test_date = ? AND r.case_no LIKE 'P%' THEN 1 ELSE 0 END) as today_p,
+
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? THEN 1 ELSE 0 END) as week_count,
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? AND r.case_no LIKE 'T%' THEN 1 ELSE 0 END) as week_t,
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? AND r.case_no LIKE 'P%' THEN 1 ELSE 0 END) as week_p,
+
             SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? THEN 1 ELSE 0 END) as month_count,
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? AND r.case_no LIKE 'T%' THEN 1 ELSE 0 END) as month_t,
+            SUM(CASE WHEN r.test_date >= ? AND r.test_date <= ? AND r.case_no LIKE 'P%' THEN 1 ELSE 0 END) as month_p,
+
             COALESCE(MAX(u.is_active), 0) as is_active
           FROM reports r
-          LEFT JOIN users u ON r.tester_name = u.display_name
-          WHERE r.is_deleted = 0 
-          GROUP BY r.tester_name 
+          LEFT JOIN users u ON (CASE WHEN INSTR(r.tester_name, ' - ') > 0 THEN SUBSTR(r.tester_name, 1, INSTR(r.tester_name, ' - ') - 1) ELSE r.tester_name END) = u.display_name
+          WHERE r.is_deleted = 0 ${testerQueryBase}
+          GROUP BY CASE WHEN INSTR(r.tester_name, ' - ') > 0 THEN SUBSTR(r.tester_name, 1, INSTR(r.tester_name, ' - ') - 1) ELSE r.tester_name END 
           ORDER BY month_count DESC, today_count DESC
         `;
-        const testerStats = await env.DB.prepare(testerQuery).bind(todayStr, monthStartStr, todayStr).all();
+        const testerStats = await env.DB.prepare(testerQuery).bind(
+            todayStr, todayStr, todayStr, 
+            weekStartStr, todayStr, weekStartStr, todayStr, weekStartStr, todayStr, 
+            monthStartStr, todayStr, monthStartStr, todayStr, monthStartStr, todayStr,
+            ...testerParams
+        ).all();
 
         return new Response(JSON.stringify({
           statusStats: statusStats.results,

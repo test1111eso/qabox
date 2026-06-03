@@ -12,7 +12,7 @@ let userEditedFields = new Set();
 let wsCurrentPage = 1;
 let reportsCurrentPage = 1;
 let currentTesterStats = [];
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 10;
 
 
 // 取得台灣時間的今天 YYYY-MM-DD
@@ -263,18 +263,30 @@ async function loadWorkspace() {
         const twMonthPrefix = twToday.substring(0, 7); // e.g. "2026-06"
         
         let todayCount = 0;
-        let monthCount = 0;
+        let monthT = 0;
+        let monthP = 0;
         let failCount = 0;
 
         data.forEach(r => {
             if (r.test_date === twToday) todayCount++;
-            if (r.test_date && r.test_date.startsWith(twMonthPrefix)) monthCount++;
+            if (r.test_date && r.test_date.startsWith(twMonthPrefix)) {
+                if (r.case_no && r.case_no.startsWith('T')) monthT++;
+                else if (r.case_no && r.case_no.startsWith('P')) monthP++;
+            }
             if (r.status === 'Fail' || r.status === 'Blocked') failCount++;
         });
 
-        document.getElementById('ws-stat-today').textContent = todayCount;
-        document.getElementById('ws-stat-month').textContent = monthCount;
-        document.getElementById('ws-stat-fail').textContent = failCount;
+        const elToday = document.getElementById('ws-stat-today');
+        if (elToday) elToday.textContent = todayCount;
+        
+        const elMonthT = document.getElementById('ws-stat-month-t');
+        if (elMonthT) elMonthT.textContent = monthT;
+        
+        const elMonthP = document.getElementById('ws-stat-month-p');
+        if (elMonthP) elMonthP.textContent = monthP;
+        
+        const elFail = document.getElementById('ws-stat-fail');
+        if (elFail) elFail.textContent = failCount;
 
         
         const startInput = document.getElementById('ws-filter-date-start');
@@ -297,8 +309,18 @@ function generateReportSummary(type) {
         return;
     }
 
-    const twToday = getTaiwanToday();
-    const prefix = type === 'daily' ? twToday : twToday.substring(0, 7); // '2026-06-02' or '2026-06'
+    const isWorkspaceView = document.getElementById('view-workspace') && !document.getElementById('view-workspace').classList.contains('hidden');
+    let targetDate = getTaiwanToday();
+    
+    if (isWorkspaceView) {
+        const wsStart = document.getElementById('ws-filter-date-start');
+        if (wsStart && wsStart.value) targetDate = wsStart.value;
+    } else {
+        const globalStart = document.getElementById('filter-start-date');
+        if (globalStart && globalStart.value) targetDate = globalStart.value;
+    }
+
+    const prefix = type === 'daily' ? targetDate : targetDate.substring(0, 7); 
     
     // 過濾符合日期的報告
     const filtered = currentReportsList.filter(r => {
@@ -324,6 +346,16 @@ function generateReportSummary(type) {
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
         ${type === 'daily' ? '日報表' : '月報表'}摘要 (${prefix})
     `;
+    
+    const extLink = document.getElementById('summary-external-link');
+    if (extLink) {
+        if (type === 'daily') {
+            extLink.href = 'https://docs.google.com/spreadsheets/d/1OXOGgXZrDmkPFTVwjhiQgP-o_JH2uSIc9Xxq7aPQxZw/edit?usp=sharing';
+        } else {
+            extLink.href = 'http://192.168.1.242/manage/engineer/monthReport/Default.aspx';
+        }
+    }
+    
     document.getElementById('summary-modal').classList.remove('hidden');
 }
 
@@ -358,11 +390,10 @@ function openModal(mode = 'normal') {
         document.getElementById('form-tester').value = savedTester;
     }
     
-    if (mode === 'prod') {
-        document.getElementById('form-env').value = '正式環境 (https://www.1111.com.tw/)';
-    } else {
-        document.getElementById('form-env').value = '';
-    }
+    document.getElementById('form-env').value = '';
+    if (typeof updateEnvButtons === 'function') updateEnvButtons();
+    
+    document.getElementById('form-status').value = 'BLOCKED';
     
     document.getElementById('ticket-input').value = '';
     updateGeneratedResult();
@@ -499,7 +530,11 @@ async function initFilterTesters() {
         if (displayName) testers.add(displayName);
         if (data.testerStats) {
             data.testerStats.forEach(t => {
-                if (t.tester_name) testers.add(t.tester_name);
+                let baseName = t.tester_name;
+                if (baseName && baseName.includes(' - ')) {
+                    baseName = baseName.split(' - ')[0];
+                }
+                if (baseName) testers.add(baseName);
             });
         }
         testers.forEach(t => {
@@ -572,13 +607,124 @@ async function loadDashboard() {
         // Render Charts
         renderCharts(data.dailyStats, data.statusStats);
 
-        // Render Tester Stats
-        currentTesterStats = data.testerStats || [];
+        // Aggregate Tester Stats
+        let groupedStats = {};
+        (data.testerStats || []).forEach(t => {
+            let baseName = t.tester_name;
+            if (baseName && baseName.includes(' - ')) {
+                baseName = baseName.split(' - ')[0];
+            }
+            if (!groupedStats[baseName]) {
+                groupedStats[baseName] = { ...t, tester_name: baseName };
+            } else {
+                groupedStats[baseName].total_count += t.total_count;
+                groupedStats[baseName].total_t = (groupedStats[baseName].total_t || 0) + (t.total_t || 0);
+                groupedStats[baseName].total_p = (groupedStats[baseName].total_p || 0) + (t.total_p || 0);
+                
+                groupedStats[baseName].today_count += t.today_count;
+                groupedStats[baseName].today_t = (groupedStats[baseName].today_t || 0) + (t.today_t || 0);
+                groupedStats[baseName].today_p = (groupedStats[baseName].today_p || 0) + (t.today_p || 0);
+                
+                groupedStats[baseName].week_count = (groupedStats[baseName].week_count || 0) + (t.week_count || 0);
+                groupedStats[baseName].week_t = (groupedStats[baseName].week_t || 0) + (t.week_t || 0);
+                groupedStats[baseName].week_p = (groupedStats[baseName].week_p || 0) + (t.week_p || 0);
+                
+                groupedStats[baseName].month_count += t.month_count;
+                groupedStats[baseName].month_t = (groupedStats[baseName].month_t || 0) + (t.month_t || 0);
+                groupedStats[baseName].month_p = (groupedStats[baseName].month_p || 0) + (t.month_p || 0);
+                
+                groupedStats[baseName].is_active = Math.max(groupedStats[baseName].is_active, t.is_active);
+            }
+        });
+        currentTesterStats = Object.values(groupedStats);
+
         renderTesterCheckboxes(currentTesterStats);
         renderTesterStats();
     } catch (err) {
         console.error(err);
         // showToast('載入儀表板資料失敗', true); // 開發階段暫時關閉錯誤提示以免沒有開 server 時彈出
+    }
+}
+
+async function showDashboardDetails(type) {
+    const container = document.getElementById('dashboard-details-container');
+    const tbody = document.getElementById('dashboard-details-body');
+    const titleEl = document.getElementById('dashboard-details-title');
+    if (!container || !tbody || !titleEl) return;
+    
+    container.classList.remove('hidden');
+    tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+    
+    try {
+        const start_date = document.getElementById('dash-filter-start')?.value || '';
+        const end_date = document.getElementById('dash-filter-end')?.value || '';
+        
+        let url = `${API_BASE}/api/reports?`;
+        if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
+        if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('無法取得案件資料');
+        const data = await res.json();
+        
+        const twToday = getTaiwanToday();
+        const twFirstDay = getTaiwanFirstDay();
+        
+        let filtered = [];
+        let title = '案件清單';
+        
+        if (type === 'month') {
+            title = start_date || end_date ? '區間案件清單' : '本月案件清單';
+            filtered = data.filter(r => {
+                if (start_date || end_date) return true;
+                return r.test_date && r.test_date >= twFirstDay;
+            });
+        } else if (type === 'today') {
+            title = start_date || end_date ? '區間 T 單 (測試) 清單' : '今日 T 單 (測試) 清單';
+            filtered = data.filter(r => {
+                const inDate = (start_date || end_date) ? true : (r.test_date === twToday);
+                return inDate && r.case_no && r.case_no.startsWith('T');
+            });
+        } else if (type === 'today-prod') {
+            title = start_date || end_date ? '區間 P 單 (上正式) 清單' : '今日 P 單 (上正式) 清單';
+            filtered = data.filter(r => {
+                const inDate = (start_date || end_date) ? true : (r.test_date === twToday);
+                return inDate && r.case_no && r.case_no.startsWith('P');
+            });
+        } else if (type === 'blocked') {
+            title = '阻礙中 (Blocked) 案件清單';
+            filtered = data.filter(r => r.status === 'Blocked');
+        }
+        
+        titleEl.textContent = title;
+        
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">尚無符合條件的案件</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        filtered.forEach((report, index) => {
+            const tr = document.createElement('tr');
+            
+            let displayTester = escapeHtml(report.tester_name);
+            if (displayTester.includes('-更')) {
+                displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
+            }
+            
+            tr.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">${index + 1}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><span class="cursor-pointer text-blue-600 hover:underline" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.project_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayTester}</td>
+                <td class="px-6 py-4 whitespace-nowrap"><span class="status-badge status-${report.status}">${report.status}</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+    } catch(err) {
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
     }
 }
 
@@ -588,6 +734,8 @@ function renderTesterCheckboxes(testerStats) {
     
     let html = '';
     testerStats.forEach(t => {
+        if (t.tester_name === 'admin') return; // 過濾掉 admin 帳號
+        
         // 如果 API 沒有回傳 is_active，我們預設為 1；若回傳 0 則代表停用
         const isActive = t.is_active !== 0;
         const checked = isActive ? 'checked' : '';
@@ -612,7 +760,7 @@ function renderTesterStats() {
     if (!tbody) return;
 
     if (!currentTesterStats || currentTesterStats.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">目前無資料</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">目前無資料</td></tr>';
         return;
     }
     
@@ -627,7 +775,7 @@ function renderTesterStats() {
     const filteredStats = currentTesterStats.filter(t => checkedTesters.includes(t.tester_name));
 
     if (filteredStats.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">請勾選要顯示的測試員</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">請勾選要顯示的測試員</td></tr>';
         return;
     }
 
@@ -651,23 +799,49 @@ function renderTesterStats() {
             ? `<span class="text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded ml-2 align-middle">我</span>`
             : '';
 
+        const todayT = t.today_t || 0;
+        const todayP = t.today_p || 0;
+        const weekT = t.week_t || 0;
+        const weekP = t.week_p || 0;
+        const monthT = t.month_t || 0;
+        const monthP = t.month_p || 0;
+        const totalT = t.total_t || 0;
+        const totalP = t.total_p || 0;
+
+        const cellClass = "px-6 py-4 whitespace-nowrap text-sm text-center";
+
         return `
             <tr class="${rowClass}">
                 <td class="px-6 py-4 whitespace-nowrap text-sm ${nameClass}">
                     ${escapeHtml(t.tester_name)}${selfBadge}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold ${t.today_count > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">
-                        ${t.today_count || 0}
-                    </span>
+                <td class="${cellClass}">
+                    <div class="flex items-center justify-center gap-1">
+                        <span class="${todayT > 0 ? 'text-blue-600 font-bold' : 'text-gray-400 font-medium'}">${todayT}</span> 
+                        <span class="text-gray-300">/</span> 
+                        <span class="${todayP > 0 ? 'text-green-600 font-bold' : 'text-gray-400 font-medium'}">${todayP}</span>
+                    </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold ${t.month_count > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}">
-                        ${t.month_count || 0}
-                    </span>
+                <td class="${cellClass}">
+                    <div class="flex items-center justify-center gap-1">
+                        <span class="${weekT > 0 ? 'text-blue-600 font-bold' : 'text-gray-400 font-medium'}">${weekT}</span> 
+                        <span class="text-gray-300">/</span> 
+                        <span class="${weekP > 0 ? 'text-green-600 font-bold' : 'text-gray-400 font-medium'}">${weekP}</span>
+                    </div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500 font-semibold">
-                    ${t.total_count !== undefined ? t.total_count : (t.count || 0)}
+                <td class="${cellClass}">
+                    <div class="flex items-center justify-center gap-1">
+                        <span class="${monthT > 0 ? 'text-blue-600 font-bold' : 'text-gray-400 font-medium'}">${monthT}</span> 
+                        <span class="text-gray-300">/</span> 
+                        <span class="${monthP > 0 ? 'text-green-600 font-bold' : 'text-gray-400 font-medium'}">${monthP}</span>
+                    </div>
+                </td>
+                <td class="${cellClass}">
+                    <div class="flex items-center justify-center gap-1">
+                        <span class="${totalT > 0 ? 'text-blue-600 font-bold' : 'text-gray-400 font-medium'}">${totalT}</span> 
+                        <span class="text-gray-300">/</span> 
+                        <span class="${totalP > 0 ? 'text-green-600 font-bold' : 'text-gray-400 font-medium'}">${totalP}</span>
+                    </div>
                 </td>
             </tr>
         `;
@@ -677,12 +851,10 @@ function renderTesterStats() {
 
 
 async function fetchReports() {
-    const tester = document.getElementById('filter-tester').value;
     const start_date = document.getElementById('filter-start-date').value;
     const end_date = document.getElementById('filter-end-date').value;
     
     let url = `${API_BASE}/api/reports?`;
-    if (tester) url += `tester=${encodeURIComponent(tester)}&`;
     if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
     if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
 
@@ -696,58 +868,8 @@ async function fetchReports() {
         
         currentReportsList = data; // 存入全域變數以供編輯時快速查找
         
-        tbody.innerHTML = '';
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
-            return;
-        }
-
-        const currentUser = localStorage.getItem('qa_display_name');
-        const currentUserRole = localStorage.getItem('qa_role') || 'user';
-        
-        // Show/hide admin columns
-        const adminCols = document.querySelectorAll('.admin-only');
-        adminCols.forEach(col => {
-            if (currentUserRole === 'admin') col.classList.remove('hidden');
-            else col.classList.add('hidden');
-        });
-
-        data.forEach(report => {
-            const tr = document.createElement('tr');
-            const isPinned = report.is_pinned === 1;
-            const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-            const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
-
-            let displayTester = escapeHtml(report.tester_name);
-            if (displayTester.includes('-更')) {
-                displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
-            }
-
-            let actionHtml = '';
-            if (currentUserRole === 'admin') {
-                actionHtml = `
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="editReport(${report.id})" class="text-indigo-600 hover:text-indigo-900 mr-3 transition">修改</button>
-                        <button onclick="deleteReport(${report.id})" class="text-red-600 hover:text-red-900 transition">刪除</button>
-                    </td>
-                `;
-            }
-
-            tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${getCategoryTagHtml(report.category)}
-                    ${escapeHtml(report.project_name)}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayTester}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                    <span class="status-badge status-${report.status}">${report.status}</span>
-                </td>
-                ${actionHtml}
-            `;
-            tbody.appendChild(tr);
-        });
+        reportsCurrentPage = 1;
+        renderReportsTable();
     } catch (err) {
         console.error(err);
         const tbody = document.getElementById('reports-table-body');
@@ -1405,11 +1527,14 @@ function updateGeneratedResult() {
     const ipadVersion = document.getElementById('form-ipad-version') ? document.getElementById('form-ipad-version').value.trim() : '';
     const isIphone = document.getElementById('chk-iphone') ? document.getElementById('chk-iphone').checked : false;
     const iphoneVersion = document.getElementById('form-iphone-version') ? document.getElementById('form-iphone-version').value.trim() : '';
+    const isOther = document.getElementById('chk-other-device') ? document.getElementById('chk-other-device').checked : false;
+    const otherVersion = document.getElementById('form-other-device') ? document.getElementById('form-other-device').value.trim() : '';
     
     let devices = [];
     if (deviceVal) devices.push(deviceVal);
     if (isIpad) devices.push(`iPad ${ipadVersion}`.trim());
     if (isIphone) devices.push(`iPhone ${iphoneVersion}`.trim());
+    if (isOther) devices.push(`${otherVersion}`.trim());
     const finalDeviceStr = devices.join(' / ');
 
     const testCaseVal = document.getElementById('form-test-case').value.trim();
@@ -1423,7 +1548,7 @@ function updateGeneratedResult() {
     let statusText = statusVal;
     if (statusVal === 'Pass') statusText = '驗證通過';
     if (statusVal === 'Fail') statusText = '驗證失敗';
-    if (statusVal === 'Blocked') statusText = '阻礙中';
+    if (statusVal === 'BLOCKED') statusText = '阻礙中';
 
     const categoryEl = document.querySelector('input[name="report_category"]:checked');
     const category = categoryEl ? categoryEl.value : '其他';
@@ -1469,6 +1594,30 @@ function copyGeneratedResult() {
     showToast('已複製到剪貼簿！');
 }
 
+function updateEnvButtons() {
+    const el = document.getElementById('form-env');
+    if (!el) return;
+    const currentVal = el.value.trim();
+    const lines = currentVal ? currentVal.split('\n').map(l => l.trim()).filter(l => l) : [];
+    const buttons = document.querySelectorAll('.env-btn');
+    buttons.forEach(btn => {
+        const envUrl = btn.getAttribute('data-env');
+        if (lines.includes(envUrl)) {
+            btn.classList.replace('bg-gray-100', 'bg-blue-100');
+            btn.classList.replace('hover:bg-gray-200', 'hover:bg-blue-200');
+            btn.classList.replace('text-gray-700', 'text-blue-800');
+            btn.classList.replace('border-gray-200', 'border-blue-400');
+            btn.classList.add('font-bold');
+        } else {
+            btn.classList.replace('bg-blue-100', 'bg-gray-100');
+            btn.classList.replace('hover:bg-blue-200', 'hover:bg-gray-200');
+            btn.classList.replace('text-blue-800', 'text-gray-700');
+            btn.classList.replace('border-blue-400', 'border-gray-200');
+            btn.classList.remove('font-bold');
+        }
+    });
+}
+
 function setEnv(url) {
     userEditedFields.add('form-env');
     const el = document.getElementById('form-env');
@@ -1487,6 +1636,7 @@ function setEnv(url) {
         el.value = url;
     }
     if (typeof parseGrafanaVersion === 'function') parseGrafanaVersion();
+    updateEnvButtons();
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
@@ -1960,19 +2110,44 @@ function copyTicketTemplate() {
 
 
 function renderWorkspaceTable() {
+    renderWorkspaceAdminModifiedTable();
+    
     const tbody = document.getElementById('ws-recent-reports-body');
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    if (!currentReportsList || currentReportsList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
+    let filteredData = currentReportsList || [];
+    
+    const startInput = document.getElementById('ws-filter-date-start');
+    const endInput = document.getElementById('ws-filter-date-end');
+    const start = startInput ? startInput.value : '';
+    const end = endInput ? endInput.value : '';
+    
+    if (start || end) {
+        filteredData = filteredData.filter(r => {
+            if (!r.test_date) return false;
+            if (start && r.test_date < start) return false;
+            if (end && r.test_date > end) return false;
+            return true;
+        });
+    }
+    
+    const typeVal = document.getElementById('ws-filter-type') ? document.getElementById('ws-filter-type').value : 'all';
+    if (typeVal === 'P') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('P'));
+    if (typeVal === 'T') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('T'));
+    
+    const catVal = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
+    if (catVal !== 'all') filteredData = filteredData.filter(r => r.category === catVal);
+
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
         document.getElementById('ws-pagination').innerHTML = '';
         return;
     }
 
     const startIndex = (wsCurrentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    const paginatedData = currentReportsList.slice(startIndex, endIndex);
+    const paginatedData = filteredData.slice(startIndex, endIndex);
 
     const currentUser = localStorage.getItem('qa_display_name');
     const currentUserRole = localStorage.getItem('qa_role') || 'user';
@@ -2016,7 +2191,63 @@ function renderWorkspaceTable() {
         tbody.appendChild(tr);
     });
     
-    renderPagination('ws-pagination', currentReportsList.length, ITEMS_PER_PAGE, wsCurrentPage, 'changeWsPage');
+    const emptyRowsCount = ITEMS_PER_PAGE - paginatedData.length;
+    for (let i = 0; i < emptyRowsCount; i++) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+        `;
+        tbody.appendChild(tr);
+    }
+    
+    renderPagination('ws-pagination', filteredData.length, ITEMS_PER_PAGE, wsCurrentPage, 'changeWsPage');
+}
+
+function renderWorkspaceAdminModifiedTable() {
+    const container = document.getElementById('ws-admin-modified-container');
+    const tbody = document.getElementById('ws-admin-modified-body');
+    if (!container || !tbody) return;
+
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    if (currentUserRole !== 'admin') {
+        container.classList.add('hidden');
+        return;
+    }
+
+    const currentUser = localStorage.getItem('qa_display_name') || '';
+    const adminModifiedData = (currentReportsList || []).filter(r => r.tester_name && r.tester_name.includes(`- ${currentUser}-更`));
+
+    if (adminModifiedData.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    tbody.innerHTML = '';
+
+    adminModifiedData.forEach(report => {
+        const tr = document.createElement('tr');
+        
+        let displayTester = escapeHtml(report.tester_name);
+        displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
+        
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                ${getCategoryTagHtml(report.category)}
+                ${escapeHtml(report.project_name)}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${displayTester}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
+                <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 function renderReportsTable() {
@@ -2024,7 +2255,36 @@ function renderReportsTable() {
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    if (!currentReportsList || currentReportsList.length === 0) {
+    let filteredData = currentReportsList || [];
+    
+    const typeVal = document.getElementById('filter-type') ? document.getElementById('filter-type').value : 'all';
+    if (typeVal === 'P') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('P'));
+    if (typeVal === 'T') filteredData = filteredData.filter(r => r.case_no && r.case_no.startsWith('T'));
+    
+    const catVal = document.getElementById('filter-category') ? document.getElementById('filter-category').value : 'all';
+    if (catVal !== 'all') filteredData = filteredData.filter(r => r.category === catVal);
+    
+    const testerVal = document.getElementById('filter-tester') ? document.getElementById('filter-tester').value : 'all';
+    if (testerVal !== 'all') {
+        filteredData = filteredData.filter(r => {
+            let baseName = r.tester_name;
+            if (baseName && baseName.includes(' - ')) baseName = baseName.split(' - ')[0];
+            return baseName === testerVal;
+        });
+    }
+    
+    // search input
+    const searchInput = document.getElementById('search-input');
+    if (searchInput && searchInput.value) {
+        const query = searchInput.value.toLowerCase();
+        filteredData = filteredData.filter(r => {
+            return (r.case_no && r.case_no.toLowerCase().includes(query)) ||
+                   (r.project_name && r.project_name.toLowerCase().includes(query)) ||
+                   (r.tester_name && r.tester_name.toLowerCase().includes(query));
+        });
+    }
+
+    if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
         document.getElementById('reports-pagination').innerHTML = '';
         return;
@@ -2032,7 +2292,14 @@ function renderReportsTable() {
 
     const startIndex = (reportsCurrentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    const paginatedData = currentReportsList.slice(startIndex, endIndex);
+    const paginatedData = filteredData.slice(startIndex, endIndex);
+
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    const adminCols = document.querySelectorAll('.admin-only');
+    adminCols.forEach(col => {
+        if (currentUserRole === 'admin') col.classList.remove('hidden');
+        else col.classList.add('hidden');
+    });
 
     paginatedData.forEach(report => {
         const tr = document.createElement('tr');
@@ -2040,10 +2307,25 @@ function renderReportsTable() {
         const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
         const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
 
-            let displayTester = escapeHtml(report.tester_name);
-            if (displayTester.includes('-更')) {
-                displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
-            }
+        let displayTester = escapeHtml(report.tester_name);
+        if (displayTester.includes('-更')) {
+            displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
+        }
+
+        let actionHtml = '';
+        if (currentUserRole === 'admin') {
+            actionHtml = `
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium admin-only">
+                    <button onclick="editReport(${report.id})" class="text-indigo-600 hover:text-indigo-900 mr-3 transition">修改</button>
+                    <button onclick="deleteReport(${report.id})" class="text-red-600 hover:text-red-900 transition">刪除</button>
+                </td>
+            `;
+        } else {
+            actionHtml = `
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium admin-only hidden">
+                </td>
+            `;
+        }
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
@@ -2056,11 +2338,26 @@ function renderReportsTable() {
             <td class="px-6 py-4 whitespace-nowrap">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
+            ${actionHtml}
         `;
         tbody.appendChild(tr);
     });
     
-    renderPagination('reports-pagination', currentReportsList.length, ITEMS_PER_PAGE, reportsCurrentPage, 'changeReportsPage');
+    const emptyRowsCountReports = ITEMS_PER_PAGE - paginatedData.length;
+    for (let i = 0; i < emptyRowsCountReports; i++) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none admin-only ${currentUserRole !== 'admin' ? 'hidden' : ''}">-</td>
+        `;
+        tbody.appendChild(tr);
+    }
+    
+    renderPagination('reports-pagination', filteredData.length, ITEMS_PER_PAGE, reportsCurrentPage, 'changeReportsPage');
 }
 
 function changeWsPage(page) {
@@ -2170,74 +2467,9 @@ document.addEventListener('click', function(e) {
 });
 
 
-function renderWorkspaceTableRows(reports) {
-    const tbody = document.getElementById('ws-recent-reports-body');
-    tbody.innerHTML = '';
-    
-    if (!reports || reports.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">此日期無測試紀錄</td></tr>';
-        return;
-    }
-
-    const currentUser = localStorage.getItem('qa_display_name');
-    const currentUserRole = localStorage.getItem('qa_role') || 'user';
-
-    reports.forEach(report => {
-        const tr = document.createElement('tr');
-        
-        const canModify = (currentUserRole === 'admin') || (report.tester_name === currentUser);
-        
-        let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
-        if (canModify) {
-            actionButtonsHtml += `
-                <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
-                <button onclick="deleteReport(${report.id})" class="text-red-500 hover:text-red-700 font-bold transition">刪除</button>
-            `;
-        }
-
-        const isPinned = report.is_pinned === 1;
-        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${getCategoryTagHtml(report.category)}
-                ${escapeHtml(report.project_name)}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="status-badge status-${report.status}">${report.status}</span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
-                ${actionButtonsHtml}
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
 function filterWorkspaceReports() {
-    const startInput = document.getElementById('ws-filter-date-start');
-    const endInput = document.getElementById('ws-filter-date-end');
-    if (!startInput || !endInput) return;
-    
-    const start = startInput.value;
-    const end = endInput.value;
-    
-    if (!start && !end) {
-        renderWorkspaceTableRows(currentReportsList.slice(0, 20));
-        return;
-    }
-    
-    const filtered = currentReportsList.filter(r => {
-        if (!r.test_date) return false;
-        if (start && r.test_date < start) return false;
-        if (end && r.test_date > end) return false;
-        return true;
-    });
-    
-    renderWorkspaceTableRows(filtered);
+    wsCurrentPage = 1;
+    renderWorkspaceTable();
 }
 
 function changeWorkspaceCalendarMonth(delta) {
