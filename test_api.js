@@ -1,6 +1,13 @@
-const test = async () => {
-    // 1. First get a valid admin token. We can login as admin/20200715 or we can query the sessions table to grab a valid token.
-    // Instead of doing all that, let's just make sure we understand what is failing.
-    console.log("This is a placeholder, need to run wrangler instead");
+// native fetch
+
+async function run() {
+    try {
+        const res = await fetch("https://qa-backend-api.test1111-tcm-tc.workers.dev/api/reports?tester=" + encodeURIComponent("鄭雅薰"));
+        console.log("Status:", res.status);
+        const text = await res.text();
+        console.log("Body:", text);
+    } catch (e) {
+        console.error("Error:", e);
+    }
 }
-test();
+run();

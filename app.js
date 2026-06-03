@@ -254,7 +254,10 @@ async function loadWorkspace() {
 
     try {
         const res = await fetch(`${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}`);
-        if (!res.ok) throw new Error('API 無法連線');
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`API 無法連線 (${res.status}): ${errText}`);
+        }
         const data = await res.json();
         
         currentReportsList = data; // 存入全域供複製/編輯使用
@@ -299,7 +302,7 @@ async function loadWorkspace() {
     } catch (err) {
         console.error(err);
         const tbody = document.getElementById('ws-recent-reports-body');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">載入失敗</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入失敗: ${err.message}</td></tr>`;
     }
 }
 
