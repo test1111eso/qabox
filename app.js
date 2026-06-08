@@ -1,5 +1,5 @@
 // Cloudflare Worker API URL
-const API_BASE = 'https://qa-backend-api.test1111-tcm-tc.workers.dev';
+const API_BASE = 'https://qagame.test1111-tcm-tc.workers.dev';
 
 let dailyChartInstance = null;
 let statusChartInstance = null;
@@ -50,7 +50,7 @@ function getCategoryTagHtml(category) {
 function getTypeTagHtml(caseNo) {
     const no = caseNo || '';
     if (no.startsWith('P')) {
-        return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-800">上正式</span>`;
+        return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-800">上正式</span>`;
     } else if (no.startsWith('T')) {
         return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-blue-100 text-blue-800">測試報告</span>`;
     }
@@ -109,6 +109,7 @@ function checkAuth() {
         initFilterTesters();
         switchView('workspace');
         initGeneratorLogic();
+        fetchDutyPerson();
     } else {
         document.getElementById('auth-view').classList.remove('hidden');
         document.getElementById('main-app').classList.add('hidden');
@@ -1304,8 +1305,6 @@ async function addCollabItem(type) {
 }
 
 async function deleteCollabItem(type, id) {
-    if (!confirm('確定要刪除嗎？')) return;
-    
     if (type === 'bulletin') {
         const token = localStorage.getItem('qa_session_token');
         if (!token) {
@@ -1321,6 +1320,7 @@ async function deleteCollabItem(type, id) {
             });
             if (!res.ok) throw new Error('刪除失敗');
             fetchBulletins();
+            showToast('佈告已刪除');
         } catch (err) {
             showToast(err.message, true);
         }
@@ -1329,6 +1329,7 @@ async function deleteCollabItem(type, id) {
         const newData = data.filter(item => item.id !== id);
         saveCollabData(type, newData);
         renderCollabList(type);
+        showToast('項目已刪除');
     }
 }
 
@@ -1942,6 +1943,182 @@ async function purgeReport(id) {
 
 // ================= Users Management Logic (Admin Only) =================
 
+let currentRoster = [];
+
+async function fetchDutyPerson() {
+    try {
+        const res = await fetch(`${API_BASE}/api/duty`);
+        if (res.ok) {
+            const data = await res.json();
+            const el = document.getElementById('ws-duty-person');
+            if (el) el.textContent = data.duty_tester || '無';
+            
+            const role = localStorage.getItem('qa_role');
+            if (role === 'admin') {
+                currentRoster = data.roster || [];
+                window.dutyStartTimestamp = data.start_timestamp || Date.now();
+                renderDutyRoster();
+                const usersView = document.getElementById('view-users');
+                if (usersView && !usersView.classList.contains('hidden')) {
+                    fetchUsers();
+                }
+            }
+        } else {
+            // Backend error (e.g. table not created)
+            const role = localStorage.getItem('qa_role');
+            if (role === 'admin') {
+                const listEl = document.getElementById('duty-roster-list');
+                if (listEl) {
+                    listEl.innerHTML = '<li class="text-center text-red-500 py-4">無法載入排班表，請確認後端已部署且資料表已建立</li>';
+                }
+            }
+        }
+    } catch (e) {
+        console.error('取得值日生失敗', e);
+        const role = localStorage.getItem('qa_role');
+        if (role === 'admin') {
+            const listEl = document.getElementById('duty-roster-list');
+            if (listEl) {
+                listEl.innerHTML = '<li class="text-center text-red-500 py-4">API 請求失敗，請檢查網路或後端狀態</li>';
+            }
+        }
+    }
+}
+
+function renderDutyRoster() {
+    const listEl = document.getElementById('duty-roster-list');
+    if (!listEl) return;
+    
+    listEl.innerHTML = '';
+    if (currentRoster.length === 0) {
+        listEl.innerHTML = '<li class="text-center text-gray-500 py-4">目前沒有排班資料，請由上方清單加入測試員</li>';
+        return;
+    }
+    
+    const dutyEl = document.getElementById('ws-duty-person');
+    const dutyName = dutyEl ? dutyEl.textContent : '';
+    
+    const getTwMonday = (ts) => {
+        const d = new Date(ts);
+        const twMs = d.getTime() + (8 * 3600000);
+        const twDate = new Date(twMs);
+        const day = twDate.getUTCDay();
+        const diff = day === 0 ? 6 : day - 1;
+        twDate.setUTCDate(twDate.getUTCDate() - diff);
+        twDate.setUTCHours(0, 0, 0, 0);
+        return twDate.getTime() - (8 * 3600000);
+    };
+
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    const startTs = window.dutyStartTimestamp || Date.now();
+    const startMonday = getTwMonday(startTs);
+    const currentMonday = getTwMonday(Date.now());
+    
+    const weeksPassed = Math.round((currentMonday - startMonday) / msPerWeek);
+    const currentIndex = currentRoster.length > 0 ? ((weeksPassed % currentRoster.length) + currentRoster.length) % currentRoster.length : 0;
+
+    currentRoster.forEach((name, index) => {
+        const li = document.createElement('li');
+        li.className = 'flex justify-between items-center bg-white p-3 rounded shadow-sm border border-gray-200 cursor-move hover:shadow-md transition';
+        li.draggable = true;
+        li.dataset.index = index;
+        
+        li.addEventListener('dragstart', handleDragStart);
+        li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('drop', handleDrop);
+        li.addEventListener('dragend', handleDragEnd);
+        
+        let weekOffset = index - currentIndex;
+        if (weekOffset < 0) weekOffset += currentRoster.length;
+        
+        const turnStartMs = currentMonday + weekOffset * msPerWeek;
+        const turnEndMs = turnStartMs + (6 * 24 * 60 * 60 * 1000); // 加上 6 天為週日
+        
+        // 轉為台灣時間後取出月日
+        const startDate = new Date(turnStartMs + 8*3600000);
+        const endDate = new Date(turnEndMs + 8*3600000);
+        const formatMD = (d) => `${d.getUTCMonth()+1}/${d.getUTCDate()}`;
+        const dateRangeStr = `${formatMD(startDate)}(一) ~ ${formatMD(endDate)}(日)`;
+
+        const badge = (index === currentIndex) ? '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-bold ml-2 border border-yellow-200">⭐ 本週</span>' : '';
+        
+        li.innerHTML = `
+            <div class="flex items-center gap-3">
+                <span class="text-gray-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg>
+                </span>
+                <div class="flex flex-col">
+                    <span class="font-medium text-gray-800">${escapeHtml(name)}${badge}</span>
+                    <span class="text-xs text-gray-500 mt-0.5">🗓️ 排定日期: ${dateRangeStr}</span>
+                </div>
+            </div>
+            <button onclick="removeFromRoster(${index})" class="text-red-400 hover:text-red-600 focus:outline-none" title="移除">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        `;
+        listEl.appendChild(li);
+    });
+}
+
+let dragStartIndex;
+
+function handleDragStart(e) {
+    dragStartIndex = +e.target.closest('li').dataset.index;
+    e.target.closest('li').classList.add('opacity-50');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    const targetLi = e.target.closest('li');
+    if (!targetLi) return;
+    const dragEndIndex = +targetLi.dataset.index;
+    if (isNaN(dragEndIndex) || dragEndIndex === dragStartIndex) return;
+    
+    const item = currentRoster.splice(dragStartIndex, 1)[0];
+    currentRoster.splice(dragEndIndex, 0, item);
+    
+    renderDutyRoster();
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('opacity-50');
+}
+
+function removeFromRoster(index) {
+    currentRoster.splice(index, 1);
+    renderDutyRoster();
+    fetchUsers();
+}
+
+function addToRoster(displayName) {
+    if (currentRoster.includes(displayName)) return;
+    currentRoster.push(displayName);
+    renderDutyRoster();
+    fetchUsers();
+}
+
+async function saveDutyRoster() {
+    const token = localStorage.getItem('qa_session_token');
+    try {
+        const res = await fetch(`${API_BASE}/api/duty/roster`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, roster: currentRoster })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '儲存失敗');
+        showToast('排班順序已成功儲存！');
+        fetchDutyPerson();
+    } catch (err) {
+        console.error(err);
+        showToast(err.message, true);
+    }
+}
+
 async function fetchUsers() {
     const token = localStorage.getItem('qa_session_token');
     const tbody = document.getElementById('users-table-body');
@@ -1980,7 +2157,12 @@ async function fetchUsers() {
                 ? '<span class="text-gray-400 text-xs italic mr-3">無法停用</span>' 
                 : `<button onclick="toggleUserActive(${user.id}, ${user.is_active})" class="${buttonClass} transition mr-3">${buttonText}</button>`;
                 
-            const resetAction = `<button onclick="resetUserPassword(${user.id}, '${escapeHtml(user.display_name)}')" class="text-primary hover:text-blue-700 font-semibold transition">重設密碼 🔑</button>`;
+            const resetAction = `<button onclick="resetUserPassword(${user.id}, '${escapeHtml(user.display_name)}')" class="text-primary hover:text-blue-700 font-semibold transition mr-3">重設密碼 🔑</button>`;
+
+            const inRoster = currentRoster.includes(user.display_name);
+            const rosterAction = inRoster 
+                ? `<span class="text-gray-400 font-semibold text-xs italic">已在排班</span>`
+                : `<button onclick="addToRoster('${escapeHtml(user.display_name)}')" class="text-indigo-500 hover:text-indigo-700 font-semibold transition">加入排班 ➕</button>`;
 
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(user.username)}</td>
@@ -1995,6 +2177,7 @@ async function fetchUsers() {
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ${statusAction}
                     ${resetAction}
+                    ${rosterAction}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -2211,7 +2394,7 @@ function renderWorkspaceTable() {
                 ${escapeHtml(report.project_name)}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap text-center">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
@@ -2365,7 +2548,7 @@ function renderReportsTable() {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayTester}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap text-center">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
             ${actionHtml}

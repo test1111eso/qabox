@@ -42,6 +42,9 @@
                                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                         </svg>
                         <span class="font-bold text-xl tracking-wide">Q-Draft 除草室</span>
+                        <div class="hidden sm:flex items-center bg-yellow-50 text-yellow-800 px-3 py-1 rounded-md text-sm font-bold border border-yellow-200 shadow-sm ml-2">
+                            ⭐ 本週除草員：<span id="ws-duty-person" class="ml-1 text-yellow-900">無</span>
+                        </div>
                     </div>
                     <div class="flex gap-4">
                         <button onclick="switchView('dashboard')"
@@ -254,10 +257,10 @@
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         專案</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        日期</th>
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        類型</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         狀態</th>
                                     <th
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -315,7 +318,9 @@
             <!-- View: Dashboard -->
             <div id="view-dashboard" class="view-section fade-in">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <h1 class="text-3xl font-bold text-gray-900">總覽儀表板</h1>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                        <h1 class="text-3xl font-bold text-gray-900">總覽儀表板</h1>
+                    </div>
                     <div
                         class="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-100">
                         <span class="text-sm font-medium text-gray-600 px-2">篩選區間</span>
@@ -495,7 +500,7 @@
                     <h1 class="text-3xl font-bold text-gray-900">測試報告</h1>
                     <div class="flex gap-2">
                         <button onclick="openModal('prod')"
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
+                            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                 xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -596,10 +601,10 @@
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         測試員</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        日期</th>
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        類型</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         狀態</th>
                                     <th
                                         class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider admin-only hidden">
@@ -715,6 +720,25 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Duty Roster Section -->
+                <div class="mt-10">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-900">📅 每週值日生排班表</h2>
+                            <p class="text-sm text-gray-500 mt-1">拖曳下方卡片可調整排班順序，系統會自動按週輪替。</p>
+                        </div>
+                        <button onclick="saveDutyRoster()" class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-medium shadow-sm transition">
+                            儲存排序
+                        </button>
+                    </div>
+                    <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                        <ul id="duty-roster-list" class="space-y-3">
+                            <!-- Populated by JS -->
+                            <li class="text-center text-gray-500 py-4">載入中...</li>
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -1369,7 +1393,7 @@
             </div>
         </div>
         <!-- Scripts -->
-        <script src="app.js?v=20260603_6"></script>
+        <script src="app.js?v=20260603_7"></script>
 </body>
 
 </html>

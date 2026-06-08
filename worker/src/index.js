@@ -204,24 +204,16 @@ export default {
 
         let finalTesterName = tester_name.split(' - ')[0]; // Always start with base name
         
-        let debugStr = `DEBUG: user.role=${user.role}, user.display_name=${user.display_name}, originalBaseName=${report.tester_name.split(' - ')[0]}, tester_name=${tester_name}`;
-        
         if (user.role === 'admin') {
           const originalBaseName = report.tester_name.split(' - ')[0];
           if (originalBaseName !== user.display_name) {
             finalTesterName = `${finalTesterName} - ${user.display_name}-更`;
-            debugStr += ` | Added suffix: ${finalTesterName}`;
-          } else {
-            debugStr += ` | Same user, no suffix`;
           }
         } else {
           // If non-admin user edits, preserve existing admin tag if any
           if (report.tester_name.includes('-更')) {
             const adminMark = report.tester_name.substring(report.tester_name.indexOf(' - '));
             finalTesterName = finalTesterName + adminMark;
-            debugStr += ` | Preserved suffix: ${finalTesterName}`;
-          } else {
-            debugStr += ` | Not admin, no existing suffix`;
           }
         }
 
@@ -230,8 +222,6 @@ export default {
           // It was modified to add or keep the -更 suffix. Update the notes text to match.
           updatedNotes = notes.replace(new RegExp(`(測試人員\\s*[：:]\\s*)${tester_name}`), `$1${finalTesterName}`);
         }
-        
-        updatedNotes = updatedNotes + '\n' + debugStr;
 
         await env.DB.prepare(
           'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
@@ -423,6 +413,70 @@ export default {
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      // 3.9 取得本週值日生與排班表
+      if (url.pathname === '/api/duty' && request.method === 'GET') {
+        let dutyTester = '無';
+        let roster = [];
+        let startTimestamp = Date.now();
+        try {
+            const rosterStr = await env.DB.prepare("SELECT value FROM settings WHERE key = 'duty_roster'").first();
+            const startStr = await env.DB.prepare("SELECT value FROM settings WHERE key = 'duty_start_timestamp'").first();
+            
+            if (rosterStr && rosterStr.value) roster = JSON.parse(rosterStr.value);
+            
+            if (roster.length > 0) {
+                const startTimestamp = startStr && startStr.value ? parseInt(startStr.value, 10) : Date.now();
+                
+                // 計算對應的台灣時間(UTC+8)星期一凌晨 00:00:00
+                const getTwMonday = (ts) => {
+                    const d = new Date(ts);
+                    const twMs = d.getTime() + (8 * 3600000);
+                    const twDate = new Date(twMs);
+                    const day = twDate.getUTCDay();
+                    const diff = day === 0 ? 6 : day - 1;
+                    twDate.setUTCDate(twDate.getUTCDate() - diff);
+                    twDate.setUTCHours(0, 0, 0, 0);
+                    return twDate.getTime() - (8 * 3600000);
+                };
+
+                const startMonday = getTwMonday(startTimestamp);
+                const currentMonday = getTwMonday(Date.now());
+                const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                
+                const weeksPassed = Math.round((currentMonday - startMonday) / msPerWeek);
+                const index = ((weeksPassed % roster.length) + roster.length) % roster.length;
+                dutyTester = roster[index];
+            }
+        } catch(e) {}
+        
+        return new Response(JSON.stringify({ duty_tester: dutyTester, roster: roster, start_timestamp: startTimestamp }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3.10 儲存值日生排班表
+      if (url.pathname === '/api/duty/roster' && request.method === 'POST') {
+        const { token, roster } = await request.json();
+        const user = await getUserByToken(token, env);
+        if (!user || user.role !== 'admin') {
+          return new Response(JSON.stringify({ error: '無權限' }), { status: 403, headers: corsHeaders });
+        }
+        
+        if (!Array.isArray(roster)) {
+            return new Response(JSON.stringify({ error: '無效的排班資料' }), { status: 400, headers: corsHeaders });
+        }
+
+        const rosterJson = JSON.stringify(roster);
+        await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('duty_roster', ?)").bind(rosterJson).run();
+        
+        const existStart = await env.DB.prepare("SELECT value FROM settings WHERE key = 'duty_start_timestamp'").first();
+        if (!existStart) {
+            await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('duty_start_timestamp', ?)").bind(Date.now().toString()).run();
+        }
+
+        return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       // 4. 取得統計數據 (每日測試數量、各狀態總計、T/P單數)
