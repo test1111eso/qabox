@@ -104,6 +104,46 @@ function loadGeneratedResultFromReport(report) {
     userEditedFields.add('generated-result');
 }
 
+function loadReportFormFromReport(report) {
+    parseReportNotesToForm(report.notes, report.raw_ticket);
+    loadGeneratedResultFromReport(report);
+    const notesEl = document.getElementById('form-notes');
+    if (notesEl) notesEl.value = getTesterRemarkFromReport(report);
+}
+
+function syncPreviewHeaderFields() {
+    const el = document.getElementById('generated-result');
+    if (!el) return;
+
+    let text = el.value;
+    const caseNo = document.getElementById('form-case-no')?.value.trim() || '';
+    text = upsertPreviewLine(text, '案件編號', caseNo, '專案名稱');
+
+    const project = document.getElementById('form-project')?.value.trim() || '';
+    text = upsertPreviewLine(text, '專案名稱', project, '測試日期');
+
+    const dateVal = document.getElementById('form-date')?.value;
+    const formattedDate = dateVal ? dateVal.replace(/-/g, '/') : '';
+    text = upsertPreviewLine(text, '測試日期', formattedDate, '測試人員');
+
+    const tester = document.getElementById('form-tester')?.value.trim() || '';
+    text = upsertPreviewLine(text, '測試人員', tester, '工程人員');
+
+    el.value = getNotesWithoutTesterRemark(text);
+}
+
+function prepareNotesForSave() {
+    if (userEditedFields.has('generated-result')) {
+        syncPreviewHeaderFields();
+        syncPreviewTailFields();
+    } else {
+        updateGeneratedResult();
+    }
+    const remark = document.getElementById('form-notes')?.value.trim() || '';
+    const body = getNotesWithoutTesterRemark(document.getElementById('generated-result').value);
+    return buildFullNotesFromParts(body, remark);
+}
+
 function getProjectNameCellHtml(projectName, category) {
     const escaped = escapeHtml(projectName || '') || '-';
     const titleAttr = projectName ? ` title="${escapeHtml(projectName)}"` : '';
@@ -553,10 +593,28 @@ function copySummary() {
     }
 }
 
+function clearReportModalSideFields() {
+    const notesEl = document.getElementById('form-notes');
+    if (notesEl) notesEl.value = '';
+    const genEl = document.getElementById('generated-result');
+    if (genEl) genEl.value = '';
+    const grafanaEl = document.getElementById('grafana-input');
+    if (grafanaEl) grafanaEl.value = '';
+}
+
 // Modal Logic
 function openModal(mode = 'normal') {
     currentReportMode = mode;
     userEditedFields.clear();
+
+    document.getElementById('report-form').reset();
+    document.getElementById('form-report-id').value = '';
+    document.getElementById('ticket-input').value = '';
+    clearReportModalSideFields();
+
+    document.getElementById('modal-title').textContent = '撰寫測試報告';
+    document.getElementById('submit-text').textContent = '儲存報告';
+
     const modal = document.getElementById('report-modal');
     modal.classList.remove('hidden');
     // 設定今日日期為預設值 (台灣時間)
@@ -576,8 +634,11 @@ function openModal(mode = 'normal') {
     if (typeof updateEnvButtons === 'function') updateEnvButtons();
     
     document.getElementById('form-status').value = 'BLOCKED';
-    
-    document.getElementById('ticket-input').value = '';
+
+    document.querySelectorAll('input[name="report_category"]').forEach(r => { r.checked = false; });
+    const defaultCategory = document.querySelector('input[name="report_category"][value="其他"]');
+    if (defaultCategory) defaultCategory.checked = true;
+
     updateGeneratedResult();
 }
 
@@ -642,6 +703,8 @@ function closeModal() {
     document.getElementById('report-form').reset();
     document.getElementById('ticket-input').value = '';
     document.getElementById('form-report-id').value = '';
+    clearReportModalSideFields();
+    userEditedFields.clear();
     document.getElementById('modal-title').textContent = '撰寫測試報告';
     document.getElementById('submit-text').textContent = '儲存報告';
 }
@@ -650,6 +713,7 @@ function clearGeneratorForm() {
     if (confirm('確定要清空所有已輸入的內容嗎？')) {
         document.getElementById('report-form').reset();
         document.getElementById('ticket-input').value = '';
+        clearReportModalSideFields();
         const grafanaInput = document.getElementById('grafana-input');
         if (grafanaInput) grafanaInput.value = '';
         
@@ -1145,6 +1209,9 @@ function setReportsToday() {
 
 function parseReportNotesToForm(text, rawTicket) {
     if (!text) return;
+
+    const notesEl = document.getElementById('form-notes');
+    if (notesEl) notesEl.value = '';
     
     document.getElementById('ticket-input').value = rawTicket || text; // Just show it to the user so they can see the source
 
@@ -1241,8 +1308,7 @@ function copyReportNotes(id) {
     if (categoryRadio) categoryRadio.checked = true;
 
     // 解析歷史報告欄位
-    parseReportNotesToForm(report.notes, report.raw_ticket);
-    loadGeneratedResultFromReport(report);
+    loadReportFormFromReport(report);
 
     showToast('已複製報告內容為新範本，修改完案件編號即可儲存！');
 }
@@ -1281,8 +1347,7 @@ function editReport(id) {
     if (categoryRadio) categoryRadio.checked = true;
 
     // 解析歷史報告欄位
-    parseReportNotesToForm(report.notes, report.raw_ticket);
-    loadGeneratedResultFromReport(report);
+    loadReportFormFromReport(report);
 }
 
 // 刪除測試報告
@@ -1335,10 +1400,7 @@ async function submitReport(e) {
         bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
         category: document.querySelector('input[name="report_category"]:checked')?.value || '其他',
         raw_ticket: document.getElementById('ticket-input').value,
-        notes: buildFullNotesFromParts(
-            document.getElementById('generated-result').value,
-            document.getElementById('form-notes').value.trim()
-        ),
+        notes: prepareNotesForSave(),
     };
     
     if (isEditMode) {
@@ -1714,6 +1776,12 @@ function initGeneratorLogic() {
                 updated = true;
             }
 
+            const testerRemarkMatch = text.match(/(?:^|\n)(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+            if (testerRemarkMatch && !userEditedFields.has('form-notes')) {
+                document.getElementById('form-notes').value = testerRemarkMatch[1].trim();
+                updated = true;
+            }
+
             // 掃描每一行尋找標題與母子單號，並保留未匹配的段落
             const lines = text.split('\n').map(l => l.trim());
             let otherNotes = [];
@@ -1722,7 +1790,7 @@ function initGeneratorLogic() {
                 if (!line) continue;
 
                 // 若該行是已知欄位標籤，跳過它
-                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|卡片|測試案例|網址|連結|Ticket|URL|備註)\s*[：:]/i)) {
+                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|卡片|測試案例|網址|連結|Ticket|URL|備註|測試員備註|QA備註)\s*[：:]/i)) {
                     continue;
                 }
 
@@ -1856,6 +1924,7 @@ function syncPreviewTailFields() {
 
 function updateGeneratedResult() {
     if (userEditedFields.has('generated-result')) {
+        syncPreviewHeaderFields();
         syncPreviewTailFields();
         return;
     }
