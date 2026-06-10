@@ -339,23 +339,36 @@ function setAppIconState(state) {
     }
 }
 
-/** 開啟頁面時比對：伺服器版號 vs 使用者上次確認的版號 */
+/** 開啟頁面時比對：目前載入的版號 vs 伺服器最新版號 */
 async function checkForAppUpdateOnLoad() {
-    setAppIconState('ok');
     try {
         remoteAppVersion = await fetchRemoteAppVersion();
-        if (!remoteAppVersion) return;
-
-        let ackVersion = localStorage.getItem('qa_app_version_ack');
-        if (!ackVersion) {
-            ackVersion = getAppBuildVersion() || remoteAppVersion;
-            localStorage.setItem('qa_app_version_ack', ackVersion);
+        if (!remoteAppVersion) {
+            setAppIconState('ok');
+            return;
         }
-        if (remoteAppVersion !== ackVersion) {
+
+        const localVersion = getAppBuildVersion();
+        const ackVersion = localStorage.getItem('qa_app_version_ack');
+
+        // 瀏覽器載入的是舊版 HTML，或使用者尚未確認最新版
+        const stalePage = localVersion && localVersion !== remoteAppVersion;
+        const ackBehind = ackVersion && ackVersion !== remoteAppVersion;
+
+        if (stalePage || ackBehind) {
             appUpdateAvailable = true;
             setAppIconState('update');
+            return;
         }
-    } catch (e) {}
+
+        if (!ackVersion) {
+            localStorage.setItem('qa_app_version_ack', remoteAppVersion);
+        }
+        appUpdateAvailable = false;
+        setAppIconState('ok');
+    } catch (e) {
+        setAppIconState('ok');
+    }
 }
 
 async function handleAppIconClick() {
