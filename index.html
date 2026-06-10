@@ -839,6 +839,11 @@
                                 </svg>
                                 測試紀錄內容
                             </h4>
+                            <div class="flex items-center gap-2">
+                            <button id="view-edit-report-btn" onclick="editFromViewModal()"
+                                class="hidden text-xs bg-indigo-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-indigo-700 transition shadow-sm font-medium">
+                                修改
+                            </button>
                             <button onclick="copyViewReportNotes()"
                                 class="text-xs bg-primary text-white px-3 py-1.5 rounded flex items-center hover:bg-blue-600 transition shadow-sm font-medium">
                                 <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -848,6 +853,7 @@
                                 </svg>
                                 複製報告
                             </button>
+                            </div>
                         </div>
                         <textarea id="view-generated-notes"
                             class="w-full flex-1 p-4 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:outline-none resize-none shadow-sm"
@@ -972,6 +978,21 @@
                             <div>
                                 <div class="flex justify-between items-center mb-1">
                                     <label class="block text-sm font-medium text-gray-700">工單說明</label>
+                                    <div class="flex gap-3">
+                                        <label
+                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                            <input type="radio" name="ticket-notes-preset" value="by pass"
+                                                onchange="setTicketNotes('by pass')" class="text-primary focus:ring-primary">
+                                            by pass
+                                        </label>
+                                        <label
+                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                            <input type="radio" name="ticket-notes-preset" value="調整樣式，不出案例"
+                                                onchange="setTicketNotes('調整樣式，不出案例')"
+                                                class="text-primary focus:ring-primary">
+                                            調整樣式，不出案例
+                                        </label>
+                                    </div>
                                 </div>
                                 <textarea id="form-steps" rows="4"
                                     oninput="clearTicketNotesPresets(); updateGeneratedResult();"
@@ -1020,13 +1041,13 @@
                                         <button type="button" onclick="setEnv('https://www-iis-stg.1111.com.tw/')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
                                             data-env="https://www-iis-stg.1111.com.tw/">IIS-STG</button>
-                                        <button type="button" onclick="setEnv('https://recruit.1111.com.tw/login.aspx')"
+                                        <button type="button" onclick="setEnv('https://recruit.1111.com.tw')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
-                                            data-env="https://recruit.1111.com.tw/login.aspx">招募</button>
+                                            data-env="https://recruit.1111.com.tw">招募</button>
                                         <button type="button"
-                                            onclick="setEnv('https://recruit-qa.1111.com.tw/login.aspx')"
+                                            onclick="setEnv('https://recruit-qa.1111.com.tw')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
-                                            data-env="https://recruit-qa.1111.com.tw/login.aspx">招募QA</button>
+                                            data-env="https://recruit-qa.1111.com.tw">招募QA</button>
                                         <button type="button" onclick="setEnv('https://recruit-stg.1111.com.tw/')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
                                             data-env="https://recruit-stg.1111.com.tw/">招募STG</button>
@@ -1202,26 +1223,9 @@
                     <!-- Right: Generator Preview -->
                     <div class="w-full lg:w-1/2 p-6 flex flex-col bg-gray-50">
                         <div class="mb-4">
-                            <div class="flex justify-between items-center mb-1">
-                                <label class="block text-sm font-medium text-gray-700">測試員備註</label>
-                                <div class="flex gap-3">
-                                    <label
-                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                        <input type="radio" name="notes-preset" value="by pass"
-                                            onchange="setNotes('by pass')" class="text-primary focus:ring-primary">
-                                        by pass
-                                    </label>
-                                    <label
-                                        class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                        <input type="radio" name="notes-preset" value="調整樣式，不出案例"
-                                            onchange="setNotes('調整樣式，不出案例')"
-                                            class="text-primary focus:ring-primary">
-                                        調整樣式，不出案例
-                                    </label>
-                                </div>
-                            </div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">測試員備註</label>
                             <textarea id="form-notes" rows="2"
-                                oninput="clearNotesPresets();" placeholder="輸入測試員備註..."
+                                placeholder="輸入測試員備註..."
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-primary focus:border-primary bg-white"></textarea>
                         </div>
                         <div class="flex justify-between items-center mb-3">

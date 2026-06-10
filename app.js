@@ -9,6 +9,7 @@ let wsCurrentYear = new Date().getFullYear();
 let wsCurrentMonth = new Date().getMonth() + 1;
 let currentReportMode = 'normal';
 let userEditedFields = new Set();
+let viewingReportId = null;
 let wsCurrentPage = 1;
 let reportsCurrentPage = 1;
 let currentTesterStats = [];
@@ -71,6 +72,36 @@ function getNotesWithoutTesterRemark(notes) {
         .replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '')
         .replace(/\n?備註\s*[：:]\s*[^\n]+(?=\n處理狀態|$)/g, '')
         .trim();
+}
+
+function buildFullNotesFromParts(body, testerRemark) {
+    let notes = getNotesWithoutTesterRemark(body || '');
+    if (testerRemark) {
+        notes += notes ? `\n測試員備註：${testerRemark}` : `測試員備註：${testerRemark}`;
+    }
+    return notes;
+}
+
+function canUserModifyReport(report) {
+    if (!report) return false;
+    const currentUser = localStorage.getItem('qa_display_name');
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    return (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
+}
+
+function upsertReportInCache(reportData) {
+    if (!reportData?.id) return;
+    const idx = currentReportsList.findIndex(r => r.id === reportData.id);
+    if (idx >= 0) {
+        currentReportsList[idx] = { ...currentReportsList[idx], ...reportData };
+    } else {
+        currentReportsList.unshift(reportData);
+    }
+}
+
+function loadGeneratedResultFromReport(report) {
+    document.getElementById('generated-result').value = getNotesWithoutTesterRemark(report.notes) || '';
+    userEditedFields.add('generated-result');
 }
 
 function getTesterRemarkCellHtml(report) {
@@ -623,6 +654,7 @@ function clearGeneratorForm() {
         const defaultCategory = document.querySelector('input[name="report_category"][value="其他"]');
         if (defaultCategory) defaultCategory.checked = true;
         
+        userEditedFields.delete('generated-result');
         updateGeneratedResult();
         showToast('內容已清空');
     }
@@ -1116,6 +1148,8 @@ function copyReportNotes(id) {
     // 開啟 Modal
     document.getElementById('report-modal').classList.remove('hidden');
     
+    userEditedFields.clear();
+
     // 設定為 新增 模式 (這樣送出時才會是 POST 新增一筆)
     document.getElementById('form-report-id').value = ''; 
     document.getElementById('modal-title').textContent = '撰寫測試報告';
@@ -1136,7 +1170,7 @@ function copyReportNotes(id) {
 
     // 解析歷史報告欄位
     parseReportNotesToForm(report.notes, report.raw_ticket);
-    updateGeneratedResult();
+    loadGeneratedResultFromReport(report);
 
     showToast('已複製報告內容為新範本，修改完案件編號即可儲存！');
 }
@@ -1148,10 +1182,16 @@ function editReport(id) {
         showToast('找不到此報告資料', true);
         return;
     }
+    if (!canUserModifyReport(report)) {
+        showToast('您無權修改其他測試員的報告', true);
+        return;
+    }
 
     // 開啟 Modal
     document.getElementById('report-modal').classList.remove('hidden');
     
+    userEditedFields.clear();
+
     // 設定為編輯模式
     document.getElementById('form-report-id').value = report.id;
     document.getElementById('modal-title').textContent = `修改測試報告：${report.case_no || ''}`;
@@ -1170,11 +1210,16 @@ function editReport(id) {
 
     // 解析歷史報告欄位
     parseReportNotesToForm(report.notes, report.raw_ticket);
-    updateGeneratedResult();
+    loadGeneratedResultFromReport(report);
 }
 
 // 刪除測試報告
 async function deleteReport(id) {
+    const report = currentReportsList.find(r => r.id === id);
+    if (report && !canUserModifyReport(report)) {
+        showToast('您無權刪除其他測試員的報告', true);
+        return;
+    }
     if (!confirm('確定要刪除這筆測試報告嗎？此動作無法復原。')) return;
 
     try {
@@ -1218,13 +1263,10 @@ async function submitReport(e) {
         bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
         category: document.querySelector('input[name="report_category"]:checked')?.value || '其他',
         raw_ticket: document.getElementById('ticket-input').value,
-        notes: (() => {
-            let notes = document.getElementById('generated-result').value;
-            const testerRemark = document.getElementById('form-notes').value.trim();
-            notes = getNotesWithoutTesterRemark(notes);
-            if (testerRemark) notes += `\n測試員備註：${testerRemark}`;
-            return notes;
-        })(),
+        notes: buildFullNotesFromParts(
+            document.getElementById('generated-result').value,
+            document.getElementById('form-notes').value.trim()
+        ),
     };
     
     if (isEditMode) {
@@ -1251,6 +1293,24 @@ async function submitReport(e) {
         
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || (isEditMode ? '修改失敗' : '新增失敗'));
+        
+        const savedId = isEditMode ? parseInt(reportId, 10) : data.id;
+        upsertReportInCache({
+            id: savedId,
+            case_no: payload.case_no,
+            project_name: payload.project_name,
+            tester_name: payload.tester_name,
+            test_date: payload.test_date,
+            status: payload.status,
+            bug_link: payload.bug_link,
+            category: payload.category,
+            raw_ticket: payload.raw_ticket,
+            notes: payload.notes,
+        });
+
+        if (viewingReportId === savedId) {
+            refreshViewReportModal(savedId);
+        }
         
         showToast(isEditMode ? '測試報告已成功修改！' : '測試報告已成功新增！');
         closeModal();
@@ -1494,6 +1554,13 @@ function initGeneratorLogic() {
         }
     });
 
+    const generatedResult = document.getElementById('generated-result');
+    if (generatedResult) {
+        generatedResult.addEventListener('input', (e) => {
+            if (e.isTrusted) userEditedFields.add('generated-result');
+        });
+    }
+
     const grafanaInput = document.getElementById('grafana-input');
     if (grafanaInput) {
         grafanaInput.addEventListener('input', (e) => {
@@ -1668,6 +1735,8 @@ function parseGrafanaVersion() {
 }
 
 function updateGeneratedResult() {
+    if (userEditedFields.has('generated-result')) return;
+
     const caseNoVal = document.getElementById('form-case-no') ? document.getElementById('form-case-no').value.trim() : '';
     const projectNameVal = document.getElementById('form-project') ? document.getElementById('form-project').value.trim() : '';
     const dateVal = document.getElementById('form-date').value;
@@ -1808,22 +1877,13 @@ function clearTcPresets() {
 
 function setTicketNotes(val) {
     userEditedFields.add('form-steps');
+    userEditedFields.delete('generated-result');
     document.getElementById('form-steps').value = val;
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
 function clearTicketNotesPresets() {
     const radios = document.getElementsByName('ticket-notes-preset');
-    radios.forEach(r => r.checked = false);
-}
-
-function setNotes(val) {
-    document.getElementById('form-notes').value = val;
-    if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
-}
-
-function clearNotesPresets() {
-    const radios = document.getElementsByName('notes-preset');
     radios.forEach(r => r.checked = false);
 }
 
@@ -2368,6 +2428,11 @@ async function resetUserPassword(userId, displayName) {
 
 // ================= Pin Logic =================
 async function togglePin(id, currentPinned) {
+    const report = currentReportsList.find(r => r.id === id);
+    if (report && !canUserModifyReport(report)) {
+        showToast('您無權釘選其他測試員的報告', true);
+        return;
+    }
     const token = localStorage.getItem('qa_session_token');
     const newPinned = currentPinned === 1 ? 0 : 1;
     try {
@@ -2396,15 +2461,13 @@ async function togglePin(id, currentPinned) {
 }
 
 // ================= View Report Modal Logic =================
-function viewReportDetails(id) {
+function refreshViewReportModal(id) {
     const report = currentReportsList.find(r => r.id === id);
-    if (!report) {
-        showToast('找不到此報告資料', true);
-        return;
-    }
-    
+    if (!report) return;
+
     document.getElementById('view-modal-title').textContent = `查看測試報告：${report.case_no || ''}`;
     document.getElementById('view-raw-ticket').value = report.raw_ticket || '未提供原始工單';
+
     const testerRemark = getTesterRemarkFromReport(report);
     const remarkEl = document.getElementById('view-tester-remark');
     if (testerRemark) {
@@ -2414,13 +2477,35 @@ function viewReportDetails(id) {
         remarkEl.textContent = '無';
         remarkEl.className = 'view-tester-remark-text is-empty';
     }
+
     const notesWithoutRemark = getNotesWithoutTesterRemark(report.notes);
     document.getElementById('view-generated-notes').value = notesWithoutRemark || '無測試紀錄內容';
-    
+
+    const editBtn = document.getElementById('view-edit-report-btn');
+    if (editBtn) editBtn.classList.toggle('hidden', !canUserModifyReport(report));
+}
+
+function editFromViewModal() {
+    if (!viewingReportId) return;
+    const id = viewingReportId;
+    closeViewReportModal();
+    editReport(id);
+}
+
+function viewReportDetails(id) {
+    const report = currentReportsList.find(r => r.id === id);
+    if (!report) {
+        showToast('找不到此報告資料', true);
+        return;
+    }
+
+    viewingReportId = id;
+    refreshViewReportModal(id);
     document.getElementById('view-report-modal').classList.remove('hidden');
 }
 
 function closeViewReportModal() {
+    viewingReportId = null;
     document.getElementById('view-report-modal').classList.add('hidden');
 }
 
@@ -2514,7 +2599,9 @@ function renderWorkspaceTable() {
 
         const isPinned = report.is_pinned === 1;
         const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
+        const starSvg = canModify
+            ? `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`
+            : (isPinned ? `<svg class="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>` : '');
 
             let displayTester = escapeHtml(report.tester_name);
             if (displayTester.includes('-更')) {
@@ -2650,14 +2737,13 @@ function renderReportsTable() {
 
     paginatedData.forEach(report => {
         const tr = document.createElement('tr');
-        const isPinned = report.is_pinned === 1;
-        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
 
         let displayTester = escapeHtml(report.tester_name);
         if (displayTester.includes('-更')) {
             displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
         }
+
+        const canModify = canUserModifyReport(report);
 
         let actionHtml = '';
         if (currentUserRole === 'admin') {
@@ -2673,6 +2759,12 @@ function renderReportsTable() {
                 </td>
             `;
         }
+
+        const isPinned = report.is_pinned === 1;
+        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
+        const starSvg = canModify
+            ? `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`
+            : (isPinned ? `<svg class="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>` : '');
 
         tr.innerHTML = `
             <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { starSvg })}</td>
