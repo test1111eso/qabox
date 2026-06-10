@@ -246,8 +246,15 @@
                             class="text-sm text-primary hover:text-blue-700 font-medium whitespace-nowrap shrink-0">查看全部
                             &rarr;</button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
+                    <div class="overflow-hidden">
+                        <table class="compact-report-table divide-y divide-gray-200" id="ws-table">
+                            <colgroup>
+                                <col style="width:130px">
+                                <col>
+                                <col style="width:90px">
+                                <col style="width:90px">
+                                <col style="width:140px">
+                            </colgroup>
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th
@@ -290,8 +297,14 @@
                             管理員修改紀錄
                         </h3>
                     </div>
-                    <div class="overflow-x-auto max-h-64">
-                        <table class="min-w-full divide-y divide-gray-200">
+                    <div class="overflow-y-auto overflow-x-hidden max-h-64">
+                        <table class="compact-report-table divide-y divide-gray-200" id="ws-admin-table">
+                            <colgroup>
+                                <col style="width:130px">
+                                <col>
+                                <col style="width:88px">
+                                <col style="width:100px">
+                            </colgroup>
                             <thead class="bg-gray-50 sticky top-0 shadow-sm">
                                 <tr>
                                     <th
@@ -301,7 +314,7 @@
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         專案</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         測試員</th>
                                     <th
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -380,12 +393,19 @@
                                 </svg>
                             </button>
                         </div>
-                        <div class="overflow-x-auto max-h-[400px]">
-                            <table class="min-w-full divide-y divide-gray-200">
+                        <div class="overflow-y-auto overflow-x-hidden max-h-[400px]">
+                            <table class="compact-report-table divide-y divide-gray-200" id="dashboard-details-table">
+                                <colgroup>
+                                    <col style="width:48px">
+                                    <col style="width:130px">
+                                    <col>
+                                    <col style="width:88px">
+                                    <col style="width:72px">
+                                </colgroup>
                                 <thead class="bg-gray-50 sticky top-0 z-10">
                                     <tr>
                                         <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             序號</th>
                                         <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -394,10 +414,10 @@
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             專案</th>
                                         <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             測試員</th>
                                         <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             狀態</th>
                                     </tr>
                                 </thead>
@@ -587,8 +607,16 @@
 
                 <!-- Reports Table -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
+                    <div class="overflow-hidden">
+                        <table class="compact-report-table divide-y divide-gray-200" id="reports-table">
+                            <colgroup>
+                                <col style="width:130px">
+                                <col>
+                                <col style="width:105px">
+                                <col style="width:90px">
+                                <col style="width:90px">
+                                <col style="width:110px" class="admin-only hidden">
+                            </colgroup>
                             <thead class="bg-gray-50">
                                 <tr>
                                     <th
@@ -598,7 +626,7 @@
                                         class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         專案</th>
                                     <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         測試員</th>
                                     <th
                                         class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1312,8 +1340,15 @@
             <div class="p-6 overflow-y-auto flex-grow">
                 <p class="text-xs text-gray-500 mb-4">💡
                     說明：普通測試員在此僅能查看自己被刪除的報告；管理員可查看並復原所有人的報告。已軟刪除的報告可在此「復原」至主列表，或執行「永久刪除」。</p>
-                <div class="bg-white rounded-lg border border-gray-100 overflow-x-auto shadow-inner">
-                    <table class="min-w-full divide-y divide-gray-200">
+                <div class="bg-white rounded-lg border border-gray-100 overflow-hidden shadow-inner">
+                    <table class="compact-report-table divide-y divide-gray-200" id="trash-table">
+                        <colgroup>
+                            <col style="width:130px">
+                            <col>
+                            <col style="width:88px">
+                            <col style="width:100px">
+                            <col style="width:120px">
+                        </colgroup>
                         <thead class="bg-gray-50">
                             <tr>
                                 <th
@@ -1323,10 +1358,10 @@
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     專案</th>
                                 <th
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     測試員</th>
                                 <th
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     日期</th>
                                 <th
                                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

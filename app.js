@@ -57,6 +57,16 @@ function getTypeTagHtml(caseNo) {
     return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">未知</span>`;
 }
 
+function getProjectNameCellHtml(projectName, category) {
+    const escaped = escapeHtml(projectName || '') || '-';
+    const titleAttr = projectName ? ` title="${escapeHtml(projectName)}"` : '';
+    const textSpan = `<span class="project-name-text"${titleAttr}>${escaped}</span>`;
+    if (category !== undefined && category !== null) {
+        return `<div class="project-name-cell">${getCategoryTagHtml(category)}${textSpan}</div>`;
+    }
+    return textSpan;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     
@@ -744,9 +754,9 @@ async function showDashboardDetails(type) {
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">${index + 1}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><span class="cursor-pointer text-blue-600 hover:underline" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.project_name)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayTester}</td>
-                <td class="px-6 py-4 whitespace-nowrap"><span class="status-badge status-${report.status}">${report.status}</span></td>
+                <td class="px-6 py-4 text-sm text-gray-500 project-name-col">${getProjectNameCellHtml(report.project_name, report.category)}</td>
+                <td class="px-4 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
+                <td class="px-3 py-4 whitespace-nowrap text-left"><span class="status-badge status-${report.status}">${report.status}</span></td>
             `;
             tbody.appendChild(tr);
         });
@@ -1880,12 +1890,11 @@ async function fetchTrashReports() {
             
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.case_no || '-')}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${getCategoryTagHtml(report.category)}
-                    ${escapeHtml(report.project_name)}
+                <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
+                    ${getProjectNameCellHtml(report.project_name, report.category)}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.tester_name)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
+                <td class="px-6 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${escapeHtml(report.tester_name)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${escapeHtml(report.test_date || '-')}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3 align-middle">
                     ${actionsHtml}
                 </td>
@@ -2389,9 +2398,8 @@ function renderWorkspaceTable() {
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${getCategoryTagHtml(report.category)}
-                ${escapeHtml(report.project_name)}
+            <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
+                ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">
@@ -2450,11 +2458,10 @@ function renderWorkspaceAdminModifiedTable() {
         
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${getCategoryTagHtml(report.category)}
-                ${escapeHtml(report.project_name)}
+            <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
+                ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${displayTester}</td>
+            <td class="px-6 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
                 <button onclick="editReport(${report.id})" class="text-primary hover:text-blue-700 font-bold transition">修改</button>
             </td>
@@ -2542,11 +2549,10 @@ function renderReportsTable() {
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${getCategoryTagHtml(report.category)}
-                ${escapeHtml(report.project_name)}
+            <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
+                ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${displayTester}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-center">
                 <span class="status-badge status-${report.status}">${report.status}</span>

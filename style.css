@@ -64,3 +64,61 @@
     background-color: #fef3c7;
     color: #92400e;
 }
+
+/* Compact report tables — truncate project names, no horizontal scroll */
+.compact-report-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.compact-report-table td {
+    overflow: hidden;
+}
+
+.compact-report-table .project-name-col {
+    max-width: 0;
+}
+
+.tester-col {
+    text-align: right;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#reports-table .tester-col {
+    text-align: left;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    padding-left: 0.75rem;
+    padding-right: 0.5rem;
+}
+
+#dashboard-details-table .tester-col {
+    text-align: left;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    padding-left: 0.75rem;
+    padding-right: 0.5rem;
+}
+
+.project-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.project-name-cell .project-name-text,
+.project-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.project-name-cell > .inline-block {
+    flex-shrink: 0;
+}
