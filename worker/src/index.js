@@ -20,6 +20,51 @@ async function getUserByToken(token, env) {
   return session;
 }
 
+function normalizeTesterRemarkNotes(notes) {
+  if (!notes) return notes;
+  let match = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+  if (!match) {
+    match = notes.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
+  }
+  if (!match) return notes;
+
+  const remark = match[1].trim();
+  let body = notes
+    .replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '')
+    .replace(/\n?備註\s*[：:]\s*[^\n]+(?=\n處理狀態|$)/g, '')
+    .trim();
+  if (/\n處理狀態\s*[：:]/.test(body)) {
+    return body.replace(/(\n處理狀態\s*[：:])/, `\n測試員備註：${remark}$1`);
+  }
+  return `${body}\n測試員備註：${remark}`;
+}
+
+async function migrateTesterRemarksIfNeeded(env) {
+  const migDone = await env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'tester_remark_migration_v1'"
+  ).first();
+  if (migDone?.value === '1') return { skipped: true, updated: 0 };
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, notes FROM reports WHERE is_deleted = 0 AND notes IS NOT NULL AND (notes LIKE '%QA備註%' OR notes LIKE '%測試員備註%' OR (notes LIKE '%備註%' AND notes LIKE '%處理狀態%'))"
+  ).all();
+
+  let updated = 0;
+  for (const row of results || []) {
+    const newNotes = normalizeTesterRemarkNotes(row.notes);
+    if (newNotes !== row.notes) {
+      await env.DB.prepare('UPDATE reports SET notes = ? WHERE id = ?').bind(newNotes, row.id).run();
+      updated++;
+    }
+  }
+
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('tester_remark_migration_v1', '1')"
+  ).run();
+
+  return { skipped: false, updated, total: (results || []).length };
+}
+
 export default {
   async fetch(request, env, ctx) {
     // 處理 CORS 預檢請求
@@ -95,6 +140,8 @@ export default {
 
       // 2. 取得報告列表 (支援測試員與日期區間篩選)
       if (url.pathname === '/api/reports' && request.method === 'GET') {
+        await migrateTesterRemarksIfNeeded(env);
+
         const tester = url.searchParams.get('tester');
         const date = url.searchParams.get('date');
         const start_date = url.searchParams.get('start_date');
@@ -165,6 +212,26 @@ export default {
         const nextCaseNo = `${letter}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
         
         return new Response(JSON.stringify({ nextCaseNo }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3.0 手動補上舊工單測試員備註欄位 (管理員)
+      if (url.pathname === '/api/admin/migrate-tester-remarks' && request.method === 'POST') {
+        const { token, force } = await request.json();
+        const user = await getUserByToken(token, env);
+        if (!user || user.role !== 'admin') {
+          return new Response(JSON.stringify({ error: '無權限' }), { status: 403, headers: corsHeaders });
+        }
+
+        if (force) {
+          await env.DB.prepare(
+            "DELETE FROM settings WHERE key = 'tester_remark_migration_v1'"
+          ).run();
+        }
+
+        const result = await migrateTesterRemarksIfNeeded(env);
+        return new Response(JSON.stringify({ success: true, ...result }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

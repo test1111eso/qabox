@@ -57,6 +57,30 @@ function getTypeTagHtml(caseNo) {
     return `<span class="inline-block whitespace-nowrap px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">未知</span>`;
 }
 
+function getTesterRemarkFromReport(report) {
+    const notes = typeof report === 'string' ? report : (report?.notes || '');
+    const labeled = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+    if (labeled) return labeled[1].trim();
+    const legacy = notes.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
+    return legacy ? legacy[1].trim() : '';
+}
+
+function getNotesWithoutTesterRemark(notes) {
+    if (!notes) return '';
+    return notes
+        .replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '')
+        .replace(/\n?備註\s*[：:]\s*[^\n]+(?=\n處理狀態|$)/g, '')
+        .trim();
+}
+
+function getTesterRemarkCellHtml(report) {
+    const remark = getTesterRemarkFromReport(report);
+    const escaped = escapeHtml(remark) || '-';
+    const titleAttr = remark ? ` title="${escapeHtml(remark)}"` : '';
+    const colorClass = remark ? 'text-gray-600' : 'text-gray-400';
+    return `<span class="qa-remark-text ${colorClass}"${titleAttr}>${escaped}</span>`;
+}
+
 function getProjectNameCellHtml(projectName, category) {
     const escaped = escapeHtml(projectName || '') || '-';
     const titleAttr = projectName ? ` title="${escapeHtml(projectName)}"` : '';
@@ -411,7 +435,7 @@ async function loadWorkspace() {
     } catch (err) {
         console.error(err);
         const tbody = document.getElementById('ws-recent-reports-body');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入失敗: ${err.message}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">載入失敗: ${err.message}</td></tr>`;
     }
 }
 
@@ -982,7 +1006,7 @@ async function fetchReports() {
 
     try {
         const tbody = document.getElementById('reports-table-body');
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
         
         const res = await fetch(url);
         if (!res.ok) throw new Error('API 無法連線');
@@ -996,7 +1020,7 @@ async function fetchReports() {
         console.error(err);
         const tbody = document.getElementById('reports-table-body');
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
         }
     }
 }
@@ -1054,7 +1078,11 @@ function parseReportNotesToForm(text, rawTicket) {
     const passRate = extractField(/通過率(?:\(%\))?\s*[：:]\s*([^\n]+)/);
     if (passRate) document.getElementById('form-pass-rate').value = passRate;
 
-    const notes = extractField(/備註\s*[：:]\s*([^\n]+)/);
+    let notes = extractField(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+    if (!notes) {
+        const legacyMatch = text.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
+        notes = legacyMatch ? legacyMatch[1].trim() : '';
+    }
     if (notes) document.getElementById('form-notes').value = notes;
 
     const versionMatch = text.match(/軟體版本\s*[：:]\n?([\s\S]*?)(?=\n測試環境|\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
@@ -1063,10 +1091,10 @@ function parseReportNotesToForm(text, rawTicket) {
     const envMatch = text.match(/測試環境\s*[：:]\n?([\s\S]*?)(?=\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
     if (envMatch) document.getElementById('form-env').value = envMatch[1].trim();
 
-    const testStepsMatch = text.match(/測試步驟\s*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n備註|\n處理狀態|$)/);
+    const testStepsMatch = text.match(/測試步驟\s*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n(?:測試員備註|QA備註|備註)|\n處理狀態|$)/);
     if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
 
-    const stepsMatch = text.match(/工單說明\s*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n備註|\n處理狀態|$)/);
+    const stepsMatch = text.match(/工單說明\s*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n(?:測試員備註|QA備註|備註)|\n處理狀態|$)/);
     if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
 }
 
@@ -1190,7 +1218,13 @@ async function submitReport(e) {
         bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
         category: document.querySelector('input[name="report_category"]:checked')?.value || '其他',
         raw_ticket: document.getElementById('ticket-input').value,
-        notes: document.getElementById('generated-result').value,
+        notes: (() => {
+            let notes = document.getElementById('generated-result').value;
+            const testerRemark = document.getElementById('form-notes').value.trim();
+            notes = getNotesWithoutTesterRemark(notes);
+            if (testerRemark) notes += `\n測試員備註：${testerRemark}`;
+            return notes;
+        })(),
     };
     
     if (isEditMode) {
@@ -1666,7 +1700,6 @@ function updateGeneratedResult() {
     const riskVal = document.getElementById('form-risk').value;
     const passRateVal = document.getElementById('form-pass-rate').value;
     const statusVal = document.getElementById('form-status').value;
-    const notesVal = document.getElementById('form-notes').value.trim();
     
     let statusText = statusVal;
     if (statusVal === 'Pass') statusText = '驗證通過';
@@ -1702,7 +1735,6 @@ function updateGeneratedResult() {
     if (stepsVal) template += `\n工單說明：\n${stepsVal}`;
     if (riskVal) template += `\n風險評估：${riskVal}`;
     if (passRateVal) template += `\n通過率(%)：${passRateVal}`;
-    if (notesVal) template += `\n備註：${notesVal}`;
     if (statusText) template += `\n處理狀態：${statusText}`;
 
     const cleanedTemplate = template.replace(/\n\n/g, '\n');
@@ -2373,7 +2405,17 @@ function viewReportDetails(id) {
     
     document.getElementById('view-modal-title').textContent = `查看測試報告：${report.case_no || ''}`;
     document.getElementById('view-raw-ticket').value = report.raw_ticket || '未提供原始工單';
-    document.getElementById('view-generated-notes').value = report.notes || '無測試紀錄內容';
+    const testerRemark = getTesterRemarkFromReport(report);
+    const remarkEl = document.getElementById('view-tester-remark');
+    if (testerRemark) {
+        remarkEl.textContent = testerRemark;
+        remarkEl.className = 'view-tester-remark-text has-content';
+    } else {
+        remarkEl.textContent = '無';
+        remarkEl.className = 'view-tester-remark-text is-empty';
+    }
+    const notesWithoutRemark = getNotesWithoutTesterRemark(report.notes);
+    document.getElementById('view-generated-notes').value = notesWithoutRemark || '無測試紀錄內容';
     
     document.getElementById('view-report-modal').classList.remove('hidden');
 }
@@ -2445,7 +2487,7 @@ function renderWorkspaceTable() {
     if (catVal !== 'all') filteredData = filteredData.filter(r => r.is_pinned === 1 || r.category === catVal);
 
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
         document.getElementById('ws-pagination').innerHTML = '';
         return;
     }
@@ -2485,6 +2527,7 @@ function renderWorkspaceTable() {
                 ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
             <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
+            <td class="px-3 py-4 qa-remark-col">${getTesterRemarkCellHtml(report)}</td>
             <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
@@ -2499,6 +2542,7 @@ function renderWorkspaceTable() {
     for (let i = 0; i < emptyRowsCount; i++) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
@@ -2588,7 +2632,7 @@ function renderReportsTable() {
     }
 
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
         document.getElementById('reports-pagination').innerHTML = '';
         return;
     }
@@ -2637,6 +2681,7 @@ function renderReportsTable() {
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
             <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
+            <td class="px-3 py-4 qa-remark-col">${getTesterRemarkCellHtml(report)}</td>
             <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
@@ -2649,6 +2694,7 @@ function renderReportsTable() {
     for (let i = 0; i < emptyRowsCountReports; i++) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
