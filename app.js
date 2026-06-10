@@ -122,6 +122,36 @@ function upsertReportInCache(reportData) {
     }
 }
 
+function isReportPinned(report) {
+    return Number(report?.is_pinned) === 1;
+}
+
+function findReportInCache(id) {
+    return currentReportsList.find(r => r.id === id)
+        || (wsBlockedReportsList || []).find(r => r.id === id);
+}
+
+function patchReportPinInCache(id, isPinned) {
+    const val = isPinned ? 1 : 0;
+    upsertReportInCache({ id, is_pinned: val });
+    if (wsBlockedReportsList) {
+        const blocked = wsBlockedReportsList.find(r => r.id === id);
+        if (blocked) blocked.is_pinned = val;
+    }
+}
+
+function buildPinStarSvg(report, canModify) {
+    const isPinned = isReportPinned(report);
+    const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
+    if (canModify) {
+        const pinnedVal = isPinned ? 1 : 0;
+        return `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="event.stopPropagation(); togglePin(${report.id}, ${pinnedVal})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
+    }
+    return isPinned
+        ? `<svg class="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`
+        : '';
+}
+
 function loadGeneratedResultFromReport(report) {
     document.getElementById('generated-result').value = getNotesWithoutTesterRemark(report.notes) || '';
     userEditedFields.add('generated-result');
@@ -2700,12 +2730,12 @@ async function resetUserPassword(userId, displayName) {
 
 // ================= Pin Logic =================
 async function togglePin(id, currentPinned) {
-    const report = currentReportsList.find(r => r.id === id);
-    if (report && !canUserModifyReport(report)) {
+    const report = findReportInCache(id);
+    if (!report || !canUserModifyReport(report)) {
         showToast('您無權釘選其他測試員的報告', true);
         return;
     }
-    const newPinned = currentPinned === 1 ? 0 : 1;
+    const newPinned = Number(currentPinned) === 1 ? 0 : 1;
     const token = localStorage.getItem('qa_session_token');
     try {
         const res = await fetch(`${API_BASE}/api/reports/pin`, {
@@ -2718,13 +2748,16 @@ async function togglePin(id, currentPinned) {
             showToast(data.error || '釘選失敗', true);
             return;
         }
-        
-        // 重新載入列表 (根據目前在哪個畫面)
+
+        patchReportPinInCache(id, newPinned);
+        showToast(newPinned ? '已釘選' : '已取消釘選');
+
         const workspaceView = document.getElementById('view-workspace');
         if (workspaceView && !workspaceView.classList.contains('hidden')) {
-            loadWorkspace();
+            renderWorkspaceTable();
+            refreshWorkspaceBlockedCount();
         } else {
-            fetchReports();
+            renderReportsTable();
         }
     } catch (err) {
         console.error(err);
@@ -2863,7 +2896,7 @@ function sortReportsOpenFirst(list) {
     return (list || []).slice().sort((a, b) => {
         const rank = (r) => {
             if (isReportIssueStatus(r.status)) return 2;
-            if (r.is_pinned === 1) return 1;
+            if (isReportPinned(r)) return 1;
             return 0;
         };
         const diff = rank(b) - rank(a);
@@ -3044,7 +3077,7 @@ function renderWorkspaceTable() {
     
     if (!wsShowBlockedOnly && (start || end)) {
         filteredData = filteredData.filter(r => {
-            if (r.is_pinned === 1 || isReportIssueStatus(r.status)) return true;
+            if (isReportPinned(r)) return true;
             if (!r.test_date) return false;
             if (start && r.test_date < start) return false;
             if (end && r.test_date > end) return false;
@@ -3055,11 +3088,11 @@ function renderWorkspaceTable() {
     filteredData = sortReportsOpenFirst(filteredData);
     
     const typeVal = document.getElementById('ws-filter-type') ? document.getElementById('ws-filter-type').value : 'all';
-    if (typeVal === 'P') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || (r.case_no && r.case_no.startsWith('P')));
-    if (typeVal === 'T') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || (r.case_no && r.case_no.startsWith('T')));
+    if (typeVal === 'P') filteredData = filteredData.filter(r => isReportPinned(r) || (r.case_no && r.case_no.startsWith('P')));
+    if (typeVal === 'T') filteredData = filteredData.filter(r => isReportPinned(r) || (r.case_no && r.case_no.startsWith('T')));
     
     const catVal = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
-    if (catVal !== 'all') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || r.category === catVal);
+    if (catVal !== 'all') filteredData = filteredData.filter(r => isReportPinned(r) || r.category === catVal);
 
     if (filteredData.length === 0) {
         const emptyMsg = wsShowBlockedOnly ? '目前沒有阻礙或失敗的案件' : '尚無測試紀錄';
@@ -3085,16 +3118,7 @@ function renderWorkspaceTable() {
             `;
         }
 
-        const isPinned = report.is_pinned === 1;
-        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = canModify
-            ? `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`
-            : (isPinned ? `<svg class="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>` : '');
-
-            let displayTester = escapeHtml(report.tester_name);
-            if (displayTester.includes('-更')) {
-                displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
-            }
+        const starSvg = buildPinStarSvg(report, canModify);
 
         const dateSuffix = wsShowBlockedOnly && report.test_date
             ? `<span class="text-xs text-gray-400 block mt-0.5 pl-6">${escapeHtml(report.test_date)}</span>`
@@ -3253,11 +3277,7 @@ function renderReportsTable() {
             `;
         }
 
-        const isPinned = report.is_pinned === 1;
-        const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = canModify
-            ? `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`
-            : (isPinned ? `<svg class="w-5 h-5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>` : '');
+        const starSvg = buildPinStarSvg(report, canModify);
 
         tr.innerHTML = `
             <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { starSvg })}</td>
