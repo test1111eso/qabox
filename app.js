@@ -82,11 +82,34 @@ function buildFullNotesFromParts(body, testerRemark) {
     return notes;
 }
 
+function getReportOwnerName(testerName) {
+    if (!testerName) return '';
+    const idx = String(testerName).indexOf(' - ');
+    const base = idx >= 0 ? testerName.substring(0, idx) : testerName;
+    return base.trim();
+}
+
+function getOwnerNameFromNotes(notes) {
+    if (!notes) return '';
+    const match = notes.match(/測試人員\s*[：:]\s*([^\n]+)/);
+    return match ? getReportOwnerName(match[1]) : '';
+}
+
+function isReportOwnedByCurrentUser(report) {
+    const userId = parseInt(localStorage.getItem('qa_user_id') || '', 10);
+    if (report?.owner_user_id != null && Number.isFinite(userId) && Number(report.owner_user_id) === userId) {
+        return true;
+    }
+    const currentUser = (localStorage.getItem('qa_display_name') || '').trim();
+    if (!currentUser || !report) return false;
+    if (getReportOwnerName(report.tester_name) === currentUser) return true;
+    return getOwnerNameFromNotes(report.notes) === currentUser;
+}
+
 function canUserModifyReport(report) {
     if (!report) return false;
-    const currentUser = localStorage.getItem('qa_display_name');
     const currentUserRole = localStorage.getItem('qa_role') || 'user';
-    return (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
+    return (currentUserRole === 'admin') || isReportOwnedByCurrentUser(report);
 }
 
 function upsertReportInCache(reportData) {
@@ -301,6 +324,8 @@ async function handleAuthSubmit(e) {
         
         localStorage.setItem('qa_session_token', loginData.token);
         localStorage.setItem('qa_display_name', loginData.display_name);
+        if (loginData.user_id != null) localStorage.setItem('qa_user_id', String(loginData.user_id));
+        if (loginData.username) localStorage.setItem('qa_username', loginData.username);
         localStorage.setItem('qa_role', loginData.role || 'user');
         
         document.getElementById('auth-username').value = '';
@@ -462,15 +487,43 @@ function switchView(viewId) {
 // Workspace Logic
 async function loadWorkspace() {
     const displayName = localStorage.getItem('qa_display_name');
-    if (!displayName) return;
+    const userId = localStorage.getItem('qa_user_id');
+    if (!displayName && !userId) return;
 
     try {
-        const res = await fetch(`${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}`);
+        const ownerQuery = userId
+            ? `${API_BASE}/api/reports?owner_user_id=${encodeURIComponent(userId)}`
+            : `${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}`;
+        const res = await fetch(ownerQuery);
         if (!res.ok) {
             const errText = await res.text();
             throw new Error(`API 無法連線 (${res.status}): ${errText}`);
         }
-        const data = await res.json();
+        let data = await res.json();
+
+        if (userId && displayName) {
+            try {
+                const legacyRes = await fetch(`${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}`);
+                if (legacyRes.ok) {
+                    data = mergeReportsById(data, await legacyRes.json());
+                }
+            } catch (e) {
+                console.warn('loadWorkspace legacy tester merge', e);
+            }
+        }
+
+        const currentUserRole = localStorage.getItem('qa_role') || 'user';
+        if (currentUserRole === 'admin') {
+            try {
+                const adminRes = await fetch(`${API_BASE}/api/reports?admin_edited_by=${encodeURIComponent(displayName)}`);
+                if (adminRes.ok) {
+                    const adminData = await adminRes.json();
+                    data = mergeReportsById(data, adminData);
+                }
+            } catch (e) {
+                console.warn('loadWorkspace admin_edited_by', e);
+            }
+        }
         
         currentReportsList = data; // 存入全域供複製/編輯使用
 
@@ -1221,7 +1274,13 @@ function parseReportNotesToForm(text, rawTicket) {
     };
 
     const tester = extractField(/測試人員\s*[：:]\s*([^\n]+)/);
-    if (tester) document.getElementById('form-tester').value = tester;
+    const role = localStorage.getItem('qa_role') || 'user';
+    const displayName = localStorage.getItem('qa_display_name');
+    if (tester && role === 'admin') {
+        document.getElementById('form-tester').value = tester;
+    } else if (displayName) {
+        document.getElementById('form-tester').value = displayName;
+    }
 
     const dev = extractField(/工程人員\s*[：:]\s*([^\n]+)/);
     if (dev) document.getElementById('form-developer').value = dev;
@@ -1390,11 +1449,29 @@ async function submitReport(e) {
     const reportId = document.getElementById('form-report-id').value;
     const isEditMode = !!reportId;
 
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    const displayName = (localStorage.getItem('qa_display_name') || '').trim();
+    let testerName = document.getElementById('form-tester').value.trim();
+    if (displayName && currentUserRole !== 'admin') {
+        if (isEditMode) {
+            const existing = currentReportsList.find(r => r.id === parseInt(reportId, 10));
+            if (existing?.tester_name?.includes('-更')) {
+                const adminMark = existing.tester_name.substring(existing.tester_name.indexOf(' - '));
+                testerName = displayName + adminMark;
+            } else {
+                testerName = displayName;
+            }
+        } else {
+            testerName = displayName;
+        }
+        document.getElementById('form-tester').value = testerName;
+    }
+
     const payload = {
         token: localStorage.getItem('qa_session_token'),
         case_no: document.getElementById('form-case-no').value.trim(),
         project_name: document.getElementById('form-project').value.trim(),
-        tester_name: document.getElementById('form-tester').value.trim(),
+        tester_name: testerName,
         test_date: document.getElementById('form-date').value,
         status: document.getElementById('form-status').value,
         bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
@@ -1429,6 +1506,7 @@ async function submitReport(e) {
         if (!res.ok) throw new Error(data.error || (isEditMode ? '修改失敗' : '新增失敗'));
         
         const savedId = isEditMode ? parseInt(reportId, 10) : data.id;
+        const existingReport = isEditMode ? currentReportsList.find(r => r.id === savedId) : null;
         upsertReportInCache({
             id: savedId,
             case_no: payload.case_no,
@@ -1440,7 +1518,7 @@ async function submitReport(e) {
             category: payload.category,
             raw_ticket: payload.raw_ticket,
             notes: payload.notes,
-            is_pinned: isReportIssueStatus(payload.status) ? 1 : 0,
+            is_pinned: existingReport ? (existingReport.is_pinned || 0) : 0,
         });
 
         if (viewingReportId === savedId) {
@@ -1742,7 +1820,13 @@ function initGeneratorLogic() {
             
             const testerMatch = text.match(/(?:測試人員|QA)\s*[：:]\s*([^\n]+)/);
             if (testerMatch && !userEditedFields.has('form-tester')) {
-                document.getElementById('form-tester').value = testerMatch[1].trim();
+                const role = localStorage.getItem('qa_role') || 'user';
+                const displayName = localStorage.getItem('qa_display_name');
+                if (role === 'admin') {
+                    document.getElementById('form-tester').value = testerMatch[1].trim();
+                } else if (displayName) {
+                    document.getElementById('form-tester').value = displayName;
+                }
                 updated = true;
             }
 
@@ -2235,12 +2319,9 @@ async function fetchTrashReports() {
             return;
         }
         
-        const currentUser = localStorage.getItem('qa_display_name');
-        const currentUserRole = localStorage.getItem('qa_role') || 'user';
-        
         data.forEach(report => {
             const tr = document.createElement('tr');
-            const canModify = (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
+            const canModify = canUserModifyReport(report);
             
             let actionsHtml = '';
             if (canModify) {
@@ -2625,10 +2706,6 @@ async function togglePin(id, currentPinned) {
         return;
     }
     const newPinned = currentPinned === 1 ? 0 : 1;
-    if (newPinned === 0 && report && isReportIssueStatus(report.status)) {
-        showToast('阻礙/失敗案件須變更狀態後才會解除置頂', true);
-        return;
-    }
     const token = localStorage.getItem('qa_session_token');
     try {
         const res = await fetch(`${API_BASE}/api/reports/pin`, {
@@ -2852,14 +2929,25 @@ async function refreshWorkspaceBlockedCount() {
 
 async function fetchWorkspaceBlockedReports() {
     const displayName = localStorage.getItem('qa_display_name');
-    if (!displayName) return [];
-    const testerParam = `tester=${encodeURIComponent(displayName)}`;
+    const userId = localStorage.getItem('qa_user_id');
+    if (!displayName && !userId) return [];
+
+    const ownerParam = userId
+        ? `owner_user_id=${encodeURIComponent(userId)}`
+        : `tester=${encodeURIComponent(displayName)}`;
 
     const fetchByStatus = async (status) => {
         try {
-            const res = await fetch(`${API_BASE}/api/reports?${testerParam}&status=${encodeURIComponent(status)}`);
+            const res = await fetch(`${API_BASE}/api/reports?${ownerParam}&status=${encodeURIComponent(status)}`);
             if (!res.ok) return [];
-            return await res.json();
+            let data = await res.json();
+            if (userId && displayName) {
+                try {
+                    const legacyRes = await fetch(`${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}&status=${encodeURIComponent(status)}`);
+                    if (legacyRes.ok) data = mergeReportsById(data, await legacyRes.json());
+                } catch { /* ignore */ }
+            }
+            return data;
         } catch {
             return [];
         }
@@ -2878,12 +2966,18 @@ async function fetchWorkspaceBlockedReports() {
 
     const fromCache = filterIssueReports(currentReportsList);
     try {
-        const resAll = await fetch(`${API_BASE}/api/reports?${testerParam}`);
+        const resAll = await fetch(`${API_BASE}/api/reports?${ownerParam}`);
         if (!resAll.ok) {
             if (fromCache.length > 0) return fromCache;
             throw new Error('無法載入阻礙 / 失敗案件');
         }
-        const fromAll = filterIssueReports(await resAll.json());
+        let fromAll = filterIssueReports(await resAll.json());
+        if (userId && displayName) {
+            try {
+                const legacyAll = await fetch(`${API_BASE}/api/reports?tester=${encodeURIComponent(displayName)}`);
+                if (legacyAll.ok) fromAll = mergeReportsById(fromAll, filterIssueReports(await legacyAll.json()));
+            } catch { /* ignore */ }
+        }
         return mergeReportsById(fromAll, fromCache);
     } catch (err) {
         if (fromCache.length > 0) return fromCache;
@@ -2937,6 +3031,11 @@ function renderWorkspaceTable() {
     let filteredData = wsShowBlockedOnly
         ? filterIssueReports(wsBlockedReportsList !== null ? wsBlockedReportsList : currentReportsList)
         : (currentReportsList || []);
+
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    if (currentUserRole !== 'admin') {
+        filteredData = filteredData.filter(isReportOwnedByCurrentUser);
+    }
     
     const startInput = document.getElementById('ws-filter-date-start');
     const endInput = document.getElementById('ws-filter-date-end');
@@ -2973,13 +3072,10 @@ function renderWorkspaceTable() {
     const endIndex = startIndex + ITEMS_PER_PAGE;
     const paginatedData = filteredData.slice(startIndex, endIndex);
 
-    const currentUser = localStorage.getItem('qa_display_name');
-    const currentUserRole = localStorage.getItem('qa_role') || 'user';
-
     paginatedData.forEach(report => {
         const tr = document.createElement('tr');
         
-        const canModify = (currentUserRole === 'admin') || (report.tester_name.split(' - ')[0] === currentUser);
+        const canModify = canUserModifyReport(report);
         
         let actionButtonsHtml = `<button onclick="copyReportNotes(${report.id})" class="text-secondary hover:text-green-700 font-bold transition">複製</button>`;
         if (canModify) {

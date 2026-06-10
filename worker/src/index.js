@@ -20,6 +20,91 @@ async function getUserByToken(token, env) {
   return session;
 }
 
+function getReportOwnerName(testerName) {
+  if (!testerName) return '';
+  const idx = String(testerName).indexOf(' - ');
+  const base = idx >= 0 ? testerName.substring(0, idx) : testerName;
+  return base.trim();
+}
+
+function getOwnerNameFromNotes(notes) {
+  if (!notes) return '';
+  const match = notes.match(/測試人員\s*[：:]\s*([^\n]+)/);
+  return match ? getReportOwnerName(match[1]) : '';
+}
+
+function userOwnsReport(user, report) {
+  if (!user || !report) return false;
+  if (report.owner_user_id != null && Number(report.owner_user_id) === Number(user.id)) {
+    return true;
+  }
+  const userName = (user.display_name || '').trim();
+  if (!userName) return false;
+  if (getReportOwnerName(report.tester_name) === userName) return true;
+  return getOwnerNameFromNotes(report.notes) === userName;
+}
+
+const REPORT_OWNER_BASE_SQL = `TRIM(CASE WHEN INSTR(tester_name, ' - ') > 0 THEN SUBSTR(tester_name, 1, INSTR(tester_name, ' - ') - 1) ELSE tester_name END)`;
+
+async function ensureOwnerUserIdColumn(env) {
+  const { results } = await env.DB.prepare('PRAGMA table_info(reports)').all();
+  const hasColumn = (results || []).some((col) => col.name === 'owner_user_id');
+  if (!hasColumn) {
+    await env.DB.prepare('ALTER TABLE reports ADD COLUMN owner_user_id INTEGER').run();
+  }
+}
+
+async function backfillReportOwnershipForUser(env, user) {
+  if (!user?.id) return;
+  await ensureOwnerUserIdColumn(env);
+  const displayName = (user.display_name || '').trim();
+  const username = (user.username || '').trim();
+
+  if (displayName) {
+    await env.DB.prepare(
+      `UPDATE reports SET owner_user_id = ? WHERE owner_user_id IS NULL AND ${REPORT_OWNER_BASE_SQL} = ?`
+    ).bind(user.id, displayName).run();
+  }
+  if (username) {
+    await env.DB.prepare(
+      `UPDATE reports SET owner_user_id = ? WHERE owner_user_id IS NULL AND ${REPORT_OWNER_BASE_SQL} = ?`
+    ).bind(user.id, username).run();
+  }
+}
+
+async function migrateReportOwnerUserIdIfNeeded(env) {
+  const migDone = await env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'report_owner_user_id_migration_v1'"
+  ).first();
+  if (migDone?.value === '1') return;
+
+  await ensureOwnerUserIdColumn(env);
+
+  await env.DB.prepare(`
+    UPDATE reports
+    SET owner_user_id = (
+      SELECT u.id FROM users u
+      WHERE TRIM(u.display_name) = ${REPORT_OWNER_BASE_SQL}
+      LIMIT 1
+    )
+    WHERE owner_user_id IS NULL
+  `).run();
+
+  await env.DB.prepare(`
+    UPDATE reports
+    SET owner_user_id = (
+      SELECT u.id FROM users u
+      WHERE TRIM(u.username) = ${REPORT_OWNER_BASE_SQL}
+      LIMIT 1
+    )
+    WHERE owner_user_id IS NULL
+  `).run();
+
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('report_owner_user_id_migration_v1', '1')"
+  ).run();
+}
+
 function normalizeTesterRemarkNotes(notes) {
   if (!notes) return notes;
   const match = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
@@ -118,8 +203,18 @@ export default {
         await env.DB.prepare("INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, datetime('now', '+8 hours'))")
           .bind(token, user.id, expires_at)
           .run();
+
+        await migrateReportOwnerUserIdIfNeeded(env);
+        await backfillReportOwnershipForUser(env, user);
           
-        return new Response(JSON.stringify({ success: true, token, display_name: user.display_name, role: user.role }), {
+        return new Response(JSON.stringify({
+          success: true,
+          token,
+          user_id: user.id,
+          username: user.username,
+          display_name: user.display_name,
+          role: user.role,
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -137,8 +232,11 @@ export default {
       // 2. 取得報告列表 (支援測試員與日期區間篩選)
       if (url.pathname === '/api/reports' && request.method === 'GET') {
         await migrateTesterRemarksIfNeeded(env);
+        await migrateReportOwnerUserIdIfNeeded(env);
 
         const tester = url.searchParams.get('tester');
+        const ownerUserId = url.searchParams.get('owner_user_id');
+        const adminEditedBy = url.searchParams.get('admin_edited_by');
         const date = url.searchParams.get('date');
         const start_date = url.searchParams.get('start_date');
         const end_date = url.searchParams.get('end_date');
@@ -147,9 +245,19 @@ export default {
         let query = 'SELECT * FROM reports WHERE is_deleted = 0';
         let params = [];
         
-        if (tester && tester !== 'all') {
-          query += ' AND (tester_name = ? OR tester_name LIKE ? OR tester_name LIKE ?)';
-          params.push(tester, `${tester} - %-更`, `% - ${tester}-更`);
+        if (adminEditedBy) {
+          query += ' AND tester_name LIKE ?';
+          params.push(`% - ${adminEditedBy.trim()}-更`);
+        } else if (ownerUserId) {
+          const ownerId = parseInt(ownerUserId, 10);
+          if (Number.isFinite(ownerId)) {
+            query += ' AND owner_user_id = ?';
+            params.push(ownerId);
+          }
+        } else if (tester && tester !== 'all') {
+          const ownerName = tester.trim();
+          query += ' AND (tester_name = ? OR tester_name LIKE ?)';
+          params.push(ownerName, `${ownerName} - %`);
         }
         if (statusParam) {
           const statusLower = String(statusParam).toLowerCase();
@@ -243,13 +351,16 @@ export default {
       // 3. 新增報告
       if (url.pathname === '/api/reports' && request.method === 'POST') {
         const body = await request.json();
-        const { case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
-        const isOpenIssue = status === 'Fail' || status === 'BLOCKED' || status === 'Blocked';
-        const isPinned = isOpenIssue ? 1 : 0;
+        const { token, case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
+        await migrateReportOwnerUserIdIfNeeded(env);
+
+        let ownerUserId = null;
+        const user = await getUserByToken(token, env);
+        if (user) ownerUserId = user.id;
 
         const result = await env.DB.prepare(
-          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))"
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, isPinned).run();
+          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now', '+8 hours'))"
+        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, ownerUserId).run();
         
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -271,19 +382,19 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
+        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
           return new Response(JSON.stringify({ error: '您無權修改其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
-        let finalTesterName = tester_name.split(' - ')[0]; // Always start with base name
+        let finalTesterName = getReportOwnerName(tester_name);
         
         if (user.role === 'admin') {
-          const originalBaseName = report.tester_name.split(' - ')[0];
-          if (originalBaseName !== user.display_name) {
-            finalTesterName = `${finalTesterName} - ${user.display_name}-更`;
+          const originalBaseName = getReportOwnerName(report.tester_name);
+          if (originalBaseName !== user.display_name.trim()) {
+            finalTesterName = `${finalTesterName} - ${user.display_name.trim()}-更`;
           }
         } else {
-          // If non-admin user edits, preserve existing admin tag if any
+          finalTesterName = user.display_name.trim();
           if (report.tester_name.includes('-更')) {
             const adminMark = report.tester_name.substring(report.tester_name.indexOf(' - '));
             finalTesterName = finalTesterName + adminMark;
@@ -296,14 +407,11 @@ export default {
           updatedNotes = notes.replace(new RegExp(`(測試人員\\s*[：:]\\s*)${tester_name}`), `$1${finalTesterName}`);
         }
 
-        const isOpenIssue = status === 'Fail' || status === 'BLOCKED' || status === 'Blocked';
-        const nextPinned = isOpenIssue ? 1 : (status === 'Pass' ? 0 : report.is_pinned);
-
         await env.DB.prepare(
-          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ?, is_pinned = ? WHERE id = ?'
+          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ?, owner_user_id = COALESCE(owner_user_id, ?) WHERE id = ?'
         ).bind(
           case_no, project_name, finalTesterName, test_date, status, bug_link, updatedNotes, category || '其他', raw_ticket || null,
-          nextPinned,
+          user.id,
           id
         ).run();
         
@@ -326,13 +434,8 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
+        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
           return new Response(JSON.stringify({ error: '您無權釘選其他測試員的報告' }), { status: 403, headers: corsHeaders });
-        }
-
-        const isOpenIssue = report.status === 'Fail' || report.status === 'BLOCKED' || report.status === 'Blocked';
-        if (!is_pinned && isOpenIssue) {
-          return new Response(JSON.stringify({ error: '阻礙/失敗案件須變更狀態後才會解除置頂' }), { status: 400, headers: corsHeaders });
         }
         
         await env.DB.prepare('UPDATE reports SET is_pinned = ? WHERE id = ?').bind(is_pinned ? 1 : 0, id).run();
@@ -356,7 +459,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
+        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
           return new Response(JSON.stringify({ error: '您無權刪除其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
         
@@ -395,7 +498,7 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
+        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
           return new Response(JSON.stringify({ error: '您無權復原其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
@@ -419,13 +522,53 @@ export default {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
 
-        if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
+        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
           return new Response(JSON.stringify({ error: '您無權永久刪除其他測試員的報告' }), { status: 403, headers: corsHeaders });
         }
 
         await env.DB.prepare('DELETE FROM reports WHERE id = ?').bind(id).run();
         
         return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3.5.5 將舊測試人員名稱的報告連結到指定帳號 (限管理員，改名後補資料用)
+      if (url.pathname === '/api/admin/link-report-owner' && request.method === 'POST') {
+        const { token, user_id, legacy_tester_names } = await request.json();
+        const admin = await getUserByToken(token, env);
+        if (!admin || admin.role !== 'admin') {
+          return new Response(JSON.stringify({ error: '無權限' }), { status: 403, headers: corsHeaders });
+        }
+
+        const targetUserId = parseInt(user_id, 10);
+        if (!Number.isFinite(targetUserId)) {
+          return new Response(JSON.stringify({ error: '無效的 user_id' }), { status: 400, headers: corsHeaders });
+        }
+
+        const targetUser = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(targetUserId).first();
+        if (!targetUser) {
+          return new Response(JSON.stringify({ error: '找不到使用者' }), { status: 404, headers: corsHeaders });
+        }
+
+        await migrateReportOwnerUserIdIfNeeded(env);
+
+        const names = Array.isArray(legacy_tester_names)
+          ? legacy_tester_names.map((n) => String(n || '').trim()).filter(Boolean)
+          : [];
+        if (names.length === 0) {
+          return new Response(JSON.stringify({ error: '請提供 legacy_tester_names' }), { status: 400, headers: corsHeaders });
+        }
+
+        let linked = 0;
+        for (const name of names) {
+          const result = await env.DB.prepare(
+            `UPDATE reports SET owner_user_id = ? WHERE owner_user_id IS NULL AND ${REPORT_OWNER_BASE_SQL} = ?`
+          ).bind(targetUserId, name).run();
+          linked += result.meta?.changes || 0;
+        }
+
+        return new Response(JSON.stringify({ success: true, linked }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -566,10 +709,6 @@ export default {
 
       // 4. 取得統計數據 (每日測試數量、各狀態總計、T/P單數)
       if (url.pathname === '/api/stats' && request.method === 'GET') {
-        await env.DB.prepare(
-          `UPDATE reports SET is_pinned = 1 WHERE is_deleted = 0 AND (status = 'Fail' OR status = 'BLOCKED' OR status = 'Blocked')`
-        ).run();
-
         const start_date = url.searchParams.get('start_date');
         const end_date = url.searchParams.get('end_date');
 

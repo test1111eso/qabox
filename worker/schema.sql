@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS reports (
     category TEXT DEFAULT '其他',
     is_deleted INTEGER DEFAULT 0,
     is_pinned INTEGER DEFAULT 0,
+    owner_user_id INTEGER,
     raw_ticket TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
