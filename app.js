@@ -69,6 +69,7 @@ function getProjectNameCellHtml(projectName, category) {
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
+    checkForAppUpdateOnLoad();
     
     // 當測試日期變更時，若在新增模式，則自動重新計算案件編號
     document.getElementById('form-date')?.addEventListener('change', (e) => {
@@ -233,16 +234,68 @@ async function handleLogout() {
         } catch(e) {}
     }
     
-    forceClearCache(true);
+    forceClearCache(true, true);
 }
 
-async function forceClearCache(silent = false) {
-    if (!silent && !confirm('確定要清除快取並重新載入網頁嗎？這將會讓您重新登入。')) {
+let appUpdateAvailable = false;
+
+function getAppBuildVersion() {
+    return document.querySelector('meta[name="app-version"]')?.content || '';
+}
+
+function setAppIconState(state) {
+    const btn = document.getElementById('nav-app-icon');
+    const okIcon = document.getElementById('nav-app-icon-ok');
+    const refreshIcon = document.getElementById('nav-app-icon-refresh');
+    if (!btn || !okIcon || !refreshIcon) return;
+
+    if (state === 'update') {
+        okIcon.classList.add('hidden');
+        refreshIcon.classList.remove('hidden');
+        btn.classList.add('app-update-prompt');
+        btn.title = '有新版，點此清快取（不需重新登入）';
+    } else {
+        okIcon.classList.remove('hidden');
+        refreshIcon.classList.add('hidden');
+        btn.classList.remove('app-update-prompt');
+        btn.title = '已是最新版（點此可手動清快取）';
+    }
+}
+
+/** 只在開啟頁面時檢查一次：伺服器版號不同 → 顯示循環符號 */
+async function checkForAppUpdateOnLoad() {
+    setAppIconState('ok');
+    try {
+        const res = await fetch(`./index.html?_=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const html = await res.text();
+        const match = html.match(/name="app-version"\s+content="([^"]+)"/);
+        const remoteVersion = match?.[1];
+        const localVersion = getAppBuildVersion();
+        if (remoteVersion && localVersion && remoteVersion !== localVersion) {
+            appUpdateAvailable = true;
+            setAppIconState('update');
+        }
+    } catch (e) {}
+}
+
+async function handleAppIconClick() {
+    const msg = appUpdateAvailable
+        ? '有新版更新，按「確定」清快取並重新載入（登入狀態會保留）'
+        : '清快取並重新載入？登入狀態會保留。';
+    if (!confirm(msg)) return;
+    setAppIconState('ok');
+    await forceClearCache(true, false);
+}
+
+async function forceClearCache(silent = false, clearStorage = false) {
+    if (!silent && !confirm('確定要清除快取並重新載入嗎？')) {
         return;
     }
     
-    // 清除 LocalStorage (包含登入資訊、設定等)
-    localStorage.clear();
+    if (clearStorage) {
+        localStorage.clear();
+    }
     sessionStorage.clear();
     
     if ('caches' in window) {
@@ -254,7 +307,6 @@ async function forceClearCache(silent = false) {
         }
     }
     
-    // 強制重新載入頁面，加上 timestamp 參數避免讀取到瀏覽器快取的 index.html 或 app.js
     window.location.href = window.location.pathname + '?v=' + new Date().getTime();
 }
 

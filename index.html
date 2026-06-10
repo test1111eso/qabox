@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="app-version" content="20260603_7">
     <title>QA 管理系統</title>
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,7 +25,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260603_7">
 </head>
 
 <body class="bg-gray-50 text-gray-800 font-['Inter'] antialiased">
@@ -35,12 +36,21 @@
                 <div class="flex items-center justify-between h-16">
                     <div class="flex items-center gap-3">
                         <!-- Icon placeholder -->
-                        <svg class="w-8 h-8 text-primary cursor-pointer hover:opacity-80 transition"
-                            onclick="forceClearCache()" title="點擊清除快取並重新載入" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
+                        <button type="button" id="nav-app-icon" onclick="handleAppIconClick()"
+                            class="relative shrink-0 w-8 h-8 cursor-pointer hover:opacity-80 transition"
+                            title="已是最新版">
+                            <svg id="nav-app-icon-ok" class="w-8 h-8 text-primary" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <svg id="nav-app-icon-refresh" class="hidden w-8 h-8 text-amber-400" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                </path>
+                            </svg>
+                        </button>
                         <span class="font-bold text-xl tracking-wide cursor-pointer hover:opacity-80 transition" onclick="switchView('dashboard')">Q-Draft 除草室</span>
                         <div class="hidden sm:flex items-center bg-yellow-50 text-yellow-800 px-3 py-1 rounded-md text-sm font-bold border border-yellow-200 shadow-sm ml-2">
                             ⭐ 本週除草員：<span id="ws-duty-person" class="ml-1 text-yellow-900">無</span>
