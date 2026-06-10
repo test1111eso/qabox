@@ -626,22 +626,35 @@ function generateReportSummary(type) {
         if (globalStart && globalStart.value) targetDate = globalStart.value;
     }
 
-    const prefix = type === 'daily' ? targetDate : targetDate.substring(0, 7); 
-    
-    // 過濾符合日期的報告
-    const filtered = currentReportsList.filter(r => {
-        if (!r.test_date) return false;
-        return r.test_date.startsWith(prefix);
+    const prefix = type === 'daily' ? targetDate : targetDate.substring(0, 7);
+
+    // 日報表／月報表只統計自己開的單（與工作臺列表一致，不含他人報告）
+    const byId = new Map();
+    currentReportsList.forEach(r => {
+        if (!isReportOwnedByCurrentUser(r)) return;
+        if (!r?.test_date || !r.test_date.startsWith(prefix)) return;
+        if (r.id != null) byId.set(r.id, r);
     });
+    const filtered = [...byId.values()];
 
     // 將資料依日期/案號反轉為正序 (因為 API 預設是倒序)
     const sorted = [...filtered].reverse();
 
+    // 摘要只列專案名稱，同專案只保留一筆（避免重複測試紀錄造成重複行）
+    const seenProjects = new Set();
+    const summaryRows = [];
+    for (const r of sorted) {
+        const name = (r.project_name || '').trim();
+        if (!name || seenProjects.has(name)) continue;
+        seenProjects.add(name);
+        summaryRows.push(r);
+    }
+
     let text = '';
-    if (sorted.length === 0) {
+    if (summaryRows.length === 0) {
         text = '沒產值還敢偷懶阿 (⑉･̆-･̆⑉)';
     } else {
-        sorted.forEach((r, idx) => {
+        summaryRows.forEach((r, idx) => {
             text += `${idx + 1}. ${r.project_name}\n`;
         });
     }
