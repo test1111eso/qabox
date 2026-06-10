@@ -61,17 +61,12 @@ function getTypeTagHtml(caseNo) {
 function getTesterRemarkFromReport(report) {
     const notes = typeof report === 'string' ? report : (report?.notes || '');
     const labeled = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
-    if (labeled) return labeled[1].trim();
-    const legacy = notes.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
-    return legacy ? legacy[1].trim() : '';
+    return labeled ? labeled[1].trim() : '';
 }
 
 function getNotesWithoutTesterRemark(notes) {
     if (!notes) return '';
-    return notes
-        .replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '')
-        .replace(/\n?備註\s*[：:]\s*[^\n]+(?=\n處理狀態|$)/g, '')
-        .trim();
+    return notes.replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '').trim();
 }
 
 function buildFullNotesFromParts(body, testerRemark) {
@@ -1123,24 +1118,29 @@ function parseReportNotesToForm(text, rawTicket) {
     const passRate = extractField(/通過率(?:\(%\))?\s*[：:]\s*([^\n]+)/);
     if (passRate) document.getElementById('form-pass-rate').value = passRate;
 
-    let notes = extractField(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
-    if (!notes) {
-        const legacyMatch = text.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
-        notes = legacyMatch ? legacyMatch[1].trim() : '';
+    const testStepsMatch = text.match(/測試步驟\s*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註\s*[：:]|\n處理狀態|$)/);
+    if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
+
+    const stepsMatch = text.match(/工單說明\s*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註\s*[：:]|\n處理狀態|$)/);
+    if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
+
+    // 工單備註（舊格式「備註：」在處理狀態前）→ 左側備註欄，非測試員備註
+    const ticketRemarkMatch = text.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
+    if (ticketRemarkMatch) {
+        const stepsEl = document.getElementById('form-steps');
+        if (!stepsEl.value.trim()) {
+            stepsEl.value = ticketRemarkMatch[1].trim();
+        }
     }
-    if (notes) document.getElementById('form-notes').value = notes;
+
+    const testerNotes = extractField(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+    if (testerNotes) document.getElementById('form-notes').value = testerNotes;
 
     const versionMatch = text.match(/軟體版本\s*[：:]\n?([\s\S]*?)(?=\n測試環境|\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
     if (versionMatch) document.getElementById('form-version').value = versionMatch[1].trim();
 
     const envMatch = text.match(/測試環境\s*[：:]\n?([\s\S]*?)(?=\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
     if (envMatch) document.getElementById('form-env').value = envMatch[1].trim();
-
-    const testStepsMatch = text.match(/測試步驟\s*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n(?:測試員備註|QA備註|備註)|\n處理狀態|$)/);
-    if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
-
-    const stepsMatch = text.match(/工單說明\s*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n(?:測試員備註|QA備註|備註)|\n處理狀態|$)/);
-    if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
 }
 
 // 複製該筆報告為新範本 (點擊後自動載入資料並進入「新增模式」以新增另一筆)
@@ -1648,6 +1648,12 @@ function initGeneratorLogic() {
                 updated = true;
             }
 
+            const remarkMatch = text.match(/(?:^|\n)備註\s*[：:]\s*([^\n]+)/);
+            if (remarkMatch && !userEditedFields.has('form-steps')) {
+                document.getElementById('form-steps').value = remarkMatch[1].trim();
+                updated = true;
+            }
+
             // 掃描每一行尋找標題與母子單號，並保留未匹配的段落
             const lines = text.split('\n').map(l => l.trim());
             let otherNotes = [];
@@ -1656,7 +1662,7 @@ function initGeneratorLogic() {
                 if (!line) continue;
 
                 // 若該行是已知欄位標籤，跳過它
-                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|卡片|測試案例|網址|連結|Ticket|URL)\s*[：:]/i)) {
+                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|卡片|測試案例|網址|連結|Ticket|URL|備註)\s*[：:]/i)) {
                     continue;
                 }
 
@@ -1747,8 +1753,52 @@ function parseGrafanaVersion() {
     }
 }
 
+function upsertPreviewLine(text, label, value, insertBeforeLabel) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const lineRe = new RegExp(`\\n${escaped}\\s*[：:]\\s*[^\\n]*`);
+
+    if (value) {
+        const line = `\n${label}：${value}`;
+        if (lineRe.test(text)) return text.replace(lineRe, line);
+        if (insertBeforeLabel) {
+            const beforeEsc = insertBeforeLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const beforeRe = new RegExp(`(\\n${beforeEsc}\\s*[：:])`);
+            if (beforeRe.test(text)) return text.replace(beforeRe, `${line}$1`);
+        }
+        return text + line;
+    }
+    return text.replace(lineRe, '');
+}
+
+function syncPreviewTailFields() {
+    const el = document.getElementById('generated-result');
+    if (!el) return;
+
+    let text = el.value;
+    const stepsVal = document.getElementById('form-steps')?.value.trim() || '';
+    text = upsertPreviewLine(text, '備註', stepsVal, '處理狀態');
+
+    const riskVal = document.getElementById('form-risk')?.value || '';
+    text = upsertPreviewLine(text, '風險評估', riskVal, '通過率(%)');
+
+    const passRateVal = document.getElementById('form-pass-rate')?.value || '';
+    text = upsertPreviewLine(text, '通過率(%)', passRateVal, '備註');
+
+    const statusVal = document.getElementById('form-status')?.value || '';
+    let statusText = statusVal;
+    if (statusVal === 'Pass') statusText = '驗證通過';
+    if (statusVal === 'Fail') statusText = '驗證失敗';
+    if (statusVal === 'BLOCKED') statusText = '阻礙中';
+    text = upsertPreviewLine(text, '處理狀態', statusText);
+
+    el.value = text;
+}
+
 function updateGeneratedResult() {
-    if (userEditedFields.has('generated-result')) return;
+    if (userEditedFields.has('generated-result')) {
+        syncPreviewTailFields();
+        return;
+    }
 
     const caseNoVal = document.getElementById('form-case-no') ? document.getElementById('form-case-no').value.trim() : '';
     const projectNameVal = document.getElementById('form-project') ? document.getElementById('form-project').value.trim() : '';
@@ -1814,9 +1864,9 @@ function updateGeneratedResult() {
 
     if (testCaseVal) template += `\n測試案例：${testCaseVal}`;
     if (testStepsVal) template += `\n測試步驟：\n${testStepsVal}`;
-    if (stepsVal) template += `\n工單說明：\n${stepsVal}`;
     if (riskVal) template += `\n風險評估：${riskVal}`;
     if (passRateVal) template += `\n通過率(%)：${passRateVal}`;
+    if (stepsVal) template += `\n備註：${stepsVal}`;
     if (statusText) template += `\n處理狀態：${statusText}`;
 
     const cleanedTemplate = template.replace(/\n\n/g, '\n');
@@ -1890,7 +1940,6 @@ function clearTcPresets() {
 
 function setTicketNotes(val) {
     userEditedFields.add('form-steps');
-    userEditedFields.delete('generated-result');
     document.getElementById('form-steps').value = val;
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }

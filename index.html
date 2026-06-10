@@ -975,31 +975,6 @@
                                 </div>
                             </div>
 
-                            <div>
-                                <div class="flex justify-between items-center mb-1">
-                                    <label class="block text-sm font-medium text-gray-700">工單說明</label>
-                                    <div class="flex gap-3">
-                                        <label
-                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                            <input type="radio" name="ticket-notes-preset" value="by pass"
-                                                onchange="setTicketNotes('by pass')" class="text-primary focus:ring-primary">
-                                            by pass
-                                        </label>
-                                        <label
-                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                            <input type="radio" name="ticket-notes-preset" value="調整樣式，不出案例"
-                                                onchange="setTicketNotes('調整樣式，不出案例')"
-                                                class="text-primary focus:ring-primary">
-                                            調整樣式，不出案例
-                                        </label>
-                                    </div>
-                                </div>
-                                <textarea id="form-steps" rows="4"
-                                    oninput="clearTicketNotesPresets(); updateGeneratedResult();"
-                                    placeholder="在此輸入工單說明內容..."
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
-                            </div>
-
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">母單</label>
@@ -1207,6 +1182,31 @@
                             </div>
 
                             <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="block text-sm font-medium text-gray-700">備註 <span class="text-xs font-normal text-gray-500">（工單帶入）</span></label>
+                                    <div class="flex gap-3">
+                                        <label
+                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                            <input type="radio" name="ticket-notes-preset" value="by pass"
+                                                onchange="setTicketNotes('by pass')" class="text-primary focus:ring-primary">
+                                            by pass
+                                        </label>
+                                        <label
+                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
+                                            <input type="radio" name="ticket-notes-preset" value="調整樣式，不出案例"
+                                                onchange="setTicketNotes('調整樣式，不出案例')"
+                                                class="text-primary focus:ring-primary">
+                                            調整樣式，不出案例
+                                        </label>
+                                    </div>
+                                </div>
+                                <textarea id="form-steps" rows="3"
+                                    oninput="clearTicketNotesPresets(); updateGeneratedResult();"
+                                    placeholder="貼上工單時自動帶入，或使用上方 by pass / 調整樣式"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
+                            </div>
+
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">狀態 <span
                                         class="text-red-500">*</span></label>
                                 <select id="form-status" required
@@ -1235,7 +1235,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                 </svg>
-                                回報內容預覽 (送出時將自動存入備註)
+                                回報內容預覽 (送出時將自動存入測試紀錄)
                             </h4>
                             <div class="flex gap-2">
                                 <button onclick="clearGeneratorForm()"

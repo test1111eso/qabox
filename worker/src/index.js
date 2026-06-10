@@ -22,16 +22,12 @@ async function getUserByToken(token, env) {
 
 function normalizeTesterRemarkNotes(notes) {
   if (!notes) return notes;
-  let match = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
-  if (!match) {
-    match = notes.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
-  }
+  const match = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
   if (!match) return notes;
 
   const remark = match[1].trim();
   let body = notes
     .replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '')
-    .replace(/\n?備註\s*[：:]\s*[^\n]+(?=\n處理狀態|$)/g, '')
     .trim();
   if (/\n處理狀態\s*[：:]/.test(body)) {
     return body.replace(/(\n處理狀態\s*[：:])/, `\n測試員備註：${remark}$1`);
@@ -46,7 +42,7 @@ async function migrateTesterRemarksIfNeeded(env) {
   if (migDone?.value === '1') return { skipped: true, updated: 0 };
 
   const { results } = await env.DB.prepare(
-    "SELECT id, notes FROM reports WHERE is_deleted = 0 AND notes IS NOT NULL AND (notes LIKE '%QA備註%' OR notes LIKE '%測試員備註%' OR (notes LIKE '%備註%' AND notes LIKE '%處理狀態%'))"
+    "SELECT id, notes FROM reports WHERE is_deleted = 0 AND notes IS NOT NULL AND (notes LIKE '%QA備註%' OR notes LIKE '%測試員備註%')"
   ).all();
 
   let updated = 0;
