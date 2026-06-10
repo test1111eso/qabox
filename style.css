@@ -75,8 +75,36 @@
     overflow: hidden;
 }
 
+.compact-report-table .status-col,
+.compact-report-table .type-col {
+    overflow: visible;
+}
+
 .compact-report-table .project-name-col {
     max-width: 0;
+}
+
+.case-no-col {
+    overflow: hidden;
+}
+
+.case-no-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.case-no-cell .case-no-star {
+    flex-shrink: 0;
+    line-height: 0;
+}
+
+.case-no-cell .case-no-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .tester-col {
@@ -89,19 +117,42 @@
 }
 
 #reports-table .tester-col {
-    text-align: left;
+    text-align: right;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    padding-left: 0.75rem;
-    padding-right: 0.5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.75rem;
 }
 
 #dashboard-details-table .tester-col {
-    text-align: left;
+    text-align: right;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    padding-left: 0.75rem;
+    padding-left: 0.25rem;
+    padding-right: 0.75rem;
+}
+
+.status-col {
+    text-align: center;
+    padding-left: 0.5rem;
     padding-right: 0.5rem;
+    white-space: nowrap;
+}
+
+.status-col .status-badge {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.compact-report-table col.admin-only.hidden {
+    width: 0 !important;
+}
+
+.type-col {
+    text-align: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
 }
 
 .project-name-cell {

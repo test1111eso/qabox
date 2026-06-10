@@ -50,11 +50,11 @@ function getCategoryTagHtml(category) {
 function getTypeTagHtml(caseNo) {
     const no = caseNo || '';
     if (no.startsWith('P')) {
-        return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-800">上正式</span>`;
+        return `<span class="inline-block whitespace-nowrap px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-800">上正式</span>`;
     } else if (no.startsWith('T')) {
-        return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-blue-100 text-blue-800">測試報告</span>`;
+        return `<span class="inline-block whitespace-nowrap px-2 py-1 text-xs font-bold rounded bg-blue-100 text-blue-800">測試報告</span>`;
     }
-    return `<span class="inline-block px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">未知</span>`;
+    return `<span class="inline-block whitespace-nowrap px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">未知</span>`;
 }
 
 function getProjectNameCellHtml(projectName, category) {
@@ -65,6 +65,15 @@ function getProjectNameCellHtml(projectName, category) {
         return `<div class="project-name-cell">${getCategoryTagHtml(category)}${textSpan}</div>`;
     }
     return textSpan;
+}
+
+function getCaseNoCellHtml(report, options = {}) {
+    const { starSvg = '', linked = true, textClass = 'text-blue-600 font-medium' } = options;
+    const escaped = escapeHtml(report.case_no || '-');
+    const titleAttr = ` title="${escaped}"`;
+    const starPart = starSvg ? `<span class="case-no-star">${starSvg}</span>` : '';
+    const clickAttr = linked ? ` class="case-no-text cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})"` : ` class="case-no-text ${textClass}"`;
+    return `<div class="case-no-cell">${starPart}<span${clickAttr}${titleAttr}>${escaped}</span></div>`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -238,9 +247,22 @@ async function handleLogout() {
 }
 
 let appUpdateAvailable = false;
+let remoteAppVersion = '';
 
 function getAppBuildVersion() {
     return document.querySelector('meta[name="app-version"]')?.content || '';
+}
+
+function getAppIndexUrl() {
+    return new URL('index.html', window.location.href).href;
+}
+
+async function fetchRemoteAppVersion() {
+    const res = await fetch(`${getAppIndexUrl()}?_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return '';
+    const html = await res.text();
+    const match = html.match(/name="app-version"\s+content="([^"]+)"/);
+    return match?.[1] || '';
 }
 
 function setAppIconState(state) {
@@ -262,17 +284,19 @@ function setAppIconState(state) {
     }
 }
 
-/** 只在開啟頁面時檢查一次：伺服器版號不同 → 顯示循環符號 */
+/** 開啟頁面時比對：伺服器版號 vs 使用者上次確認的版號 */
 async function checkForAppUpdateOnLoad() {
     setAppIconState('ok');
     try {
-        const res = await fetch(`./index.html?_=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const html = await res.text();
-        const match = html.match(/name="app-version"\s+content="([^"]+)"/);
-        const remoteVersion = match?.[1];
-        const localVersion = getAppBuildVersion();
-        if (remoteVersion && localVersion && remoteVersion !== localVersion) {
+        remoteAppVersion = await fetchRemoteAppVersion();
+        if (!remoteAppVersion) return;
+
+        let ackVersion = localStorage.getItem('qa_app_version_ack');
+        if (!ackVersion) {
+            ackVersion = getAppBuildVersion() || remoteAppVersion;
+            localStorage.setItem('qa_app_version_ack', ackVersion);
+        }
+        if (remoteAppVersion !== ackVersion) {
             appUpdateAvailable = true;
             setAppIconState('update');
         }
@@ -284,6 +308,13 @@ async function handleAppIconClick() {
         ? '有新版更新，按「確定」清快取並重新載入（登入狀態會保留）'
         : '清快取並重新載入？登入狀態會保留。';
     if (!confirm(msg)) return;
+
+    try {
+        const latest = remoteAppVersion || await fetchRemoteAppVersion();
+        if (latest) localStorage.setItem('qa_app_version_ack', latest);
+    } catch (e) {}
+
+    appUpdateAvailable = false;
     setAppIconState('ok');
     await forceClearCache(true, false);
 }
@@ -805,10 +836,10 @@ async function showDashboardDetails(type) {
             
             tr.innerHTML = `
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">${index + 1}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"><span class="cursor-pointer text-blue-600 hover:underline" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+                <td class="px-3 py-4 text-sm font-medium text-gray-900 case-no-col">${getCaseNoCellHtml(report)}</td>
                 <td class="px-6 py-4 text-sm text-gray-500 project-name-col">${getProjectNameCellHtml(report.project_name, report.category)}</td>
                 <td class="px-4 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
-                <td class="px-3 py-4 whitespace-nowrap text-left"><span class="status-badge status-${report.status}">${report.status}</span></td>
+                <td class="px-3 py-4 status-col"><span class="status-badge status-${report.status}">${report.status}</span></td>
             `;
             tbody.appendChild(tr);
         });
@@ -1941,7 +1972,7 @@ async function fetchTrashReports() {
             }
             
             tr.innerHTML = `
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(report.case_no || '-')}</td>
+                <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { linked: false, textClass: 'text-gray-500' })}</td>
                 <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                     ${getProjectNameCellHtml(report.project_name, report.category)}
                 </td>
@@ -2441,7 +2472,7 @@ function renderWorkspaceTable() {
 
         const isPinned = report.is_pinned === 1;
         const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
+        const starSvg = `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
 
             let displayTester = escapeHtml(report.tester_name);
             if (displayTester.includes('-更')) {
@@ -2449,12 +2480,12 @@ function renderWorkspaceTable() {
             }
 
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+            <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { starSvg })}</td>
             <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                 ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-center">
+            <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
+            <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3">
@@ -2509,7 +2540,7 @@ function renderWorkspaceAdminModifiedTable() {
         displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
         
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+            <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report)}</td>
             <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                 ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
@@ -2577,7 +2608,7 @@ function renderReportsTable() {
         const tr = document.createElement('tr');
         const isPinned = report.is_pinned === 1;
         const starColor = isPinned ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400';
-        const starSvg = `<svg class="w-5 h-5 cursor-pointer inline-block mr-1 align-text-bottom ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
+        const starSvg = `<svg class="w-5 h-5 cursor-pointer ${starColor}" onclick="togglePin(${report.id}, ${report.is_pinned || 0})" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>`;
 
         let displayTester = escapeHtml(report.tester_name);
         if (displayTester.includes('-更')) {
@@ -2600,13 +2631,13 @@ function renderReportsTable() {
         }
 
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${starSvg}<span class="cursor-pointer text-blue-600 hover:underline font-medium" onclick="viewReportDetails(${report.id})">${escapeHtml(report.case_no || '-')}</span></td>
+            <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { starSvg })}</td>
             <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                 ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-center">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-center">
+            <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
+            <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
             ${actionHtml}
