@@ -11,6 +11,11 @@ let currentReportMode = 'normal';
 let userEditedFields = new Set();
 let viewingReportId = null;
 let wsCurrentPage = 1;
+let wsShowBlockedOnly = false;
+let wsBlockedReportsList = null;
+let wsBlockedCount = null;
+let dashboardCurrentDetailType = null;
+let dashboardIssueDismissed = false;
 let reportsCurrentPage = 1;
 let currentTesterStats = [];
 const ITEMS_PER_PAGE = 10;
@@ -58,15 +63,15 @@ function getTypeTagHtml(caseNo) {
     return `<span class="inline-block whitespace-nowrap px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">未知</span>`;
 }
 
+function getNotesWithoutTesterRemark(notes) {
+    if (!notes) return '';
+    return notes.replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '').trim();
+}
+
 function getTesterRemarkFromReport(report) {
     const notes = typeof report === 'string' ? report : (report?.notes || '');
     const labeled = notes.match(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
     return labeled ? labeled[1].trim() : '';
-}
-
-function getNotesWithoutTesterRemark(notes) {
-    if (!notes) return '';
-    return notes.replace(/\n?(?:測試員備註|QA備註)\s*[：:]\s*[^\n]+/g, '').trim();
 }
 
 function buildFullNotesFromParts(body, testerRemark) {
@@ -97,14 +102,6 @@ function upsertReportInCache(reportData) {
 function loadGeneratedResultFromReport(report) {
     document.getElementById('generated-result').value = getNotesWithoutTesterRemark(report.notes) || '';
     userEditedFields.add('generated-result');
-}
-
-function getTesterRemarkCellHtml(report) {
-    const remark = getTesterRemarkFromReport(report);
-    const escaped = escapeHtml(remark) || '-';
-    const titleAttr = remark ? ` title="${escapeHtml(remark)}"` : '';
-    const colorClass = remark ? 'text-gray-600' : 'text-gray-400';
-    return `<span class="qa-remark-text ${colorClass}"${titleAttr}>${escaped}</span>`;
 }
 
 function getProjectNameCellHtml(projectName, category) {
@@ -413,7 +410,10 @@ function switchView(viewId) {
     document.getElementById(`nav-${viewId}`).classList.add('active', 'text-primary');
 
     if (viewId === 'workspace') loadWorkspace();
-    if (viewId === 'dashboard') loadDashboard();
+    if (viewId === 'dashboard') {
+        dashboardIssueDismissed = false;
+        loadDashboard();
+    }
     if (viewId === 'reports') fetchReports();
     if (viewId === 'documents') loadCollaborationBoard();
     if (viewId === 'users') fetchUsers();
@@ -448,7 +448,7 @@ async function loadWorkspace() {
                 if (r.case_no && r.case_no.startsWith('T')) monthT++;
                 else if (r.case_no && r.case_no.startsWith('P')) monthP++;
             }
-            if (r.status === 'Fail' || r.status === 'Blocked') failCount++;
+            if (isReportIssueStatus(r.status)) failCount++;
         });
 
         const elToday = document.getElementById('ws-stat-today');
@@ -470,11 +470,19 @@ async function loadWorkspace() {
         if (endInput && !endInput.value) endInput.value = twToday;
         
         renderWorkspaceCalendar(data, wsCurrentYear, wsCurrentMonth);
+        refreshWorkspaceBlockedCount();
+        if (wsShowBlockedOnly) {
+            try {
+                wsBlockedReportsList = await fetchWorkspaceBlockedReports();
+            } catch (err) {
+                console.error(err);
+            }
+        }
         filterWorkspaceReports();
     } catch (err) {
         console.error(err);
         const tbody = document.getElementById('ws-recent-reports-body');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">載入失敗: ${err.message}</td></tr>`;
+        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入失敗: ${err.message}</td></tr>`;
     }
 }
 
@@ -744,15 +752,18 @@ async function loadDashboard() {
         if (!res.ok) throw new Error('API 無法連線');
         const data = await res.json();
         
-        // Update Summary Cards
-        let total = 0;
+        // Update Summary Cards（阻礙/失敗為全站未解決數，不受日期篩選影響）
         let blocked = 0;
         let fail = 0;
-        data.statusStats.forEach(s => {
-            total += s.count;
-            if (s.status === 'Blocked') blocked = s.count;
-            if (s.status === 'Fail') fail = s.count;
-        });
+        if (data.openBlockedCount != null && data.openFailCount != null) {
+            blocked = data.openBlockedCount;
+            fail = data.openFailCount;
+        } else {
+            data.statusStats.forEach(s => {
+                if (isReportBlockedOnlyStatus(s.status)) blocked += s.count;
+                if (s.status === 'Fail') fail += s.count;
+            });
+        }
 
         const hasFilter = !!(start_date || end_date);
         
@@ -785,6 +796,24 @@ async function loadDashboard() {
 
         // Render Charts
         renderCharts(data.dailyStats, data.statusStats);
+
+        const openCount = blocked + fail;
+        if (openCount > 0 && !dashboardIssueDismissed) {
+            const keepIssuePanel = !dashboardCurrentDetailType
+                || dashboardCurrentDetailType === 'issue'
+                || dashboardCurrentDetailType === 'blocked'
+                || dashboardCurrentDetailType === 'fail';
+            if (keepIssuePanel) {
+                const detailType = (dashboardCurrentDetailType === 'blocked' || dashboardCurrentDetailType === 'fail')
+                    ? dashboardCurrentDetailType
+                    : 'issue';
+                showDashboardDetails(detailType);
+            }
+        } else if (openCount === 0) {
+            dashboardCurrentDetailType = null;
+            dashboardIssueDismissed = false;
+            document.getElementById('dashboard-details-container')?.classList.add('hidden');
+        }
 
         // Aggregate Tester Stats
         let groupedStats = {};
@@ -826,6 +855,8 @@ async function loadDashboard() {
 }
 
 async function showDashboardDetails(type) {
+    dashboardCurrentDetailType = type;
+    dashboardIssueDismissed = false;
     const container = document.getElementById('dashboard-details-container');
     const tbody = document.getElementById('dashboard-details-body');
     const titleEl = document.getElementById('dashboard-details-title');
@@ -839,16 +870,18 @@ async function showDashboardDetails(type) {
         const end_date = document.getElementById('dash-filter-end')?.value || '';
         
         let url = `${API_BASE}/api/reports?`;
-        if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
-        if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
-        if (type === 'blocked') url += `status=Blocked&`;
+        const skipDateFilter = type === 'blocked' || type === 'fail' || type === 'issue';
+        if (!skipDateFilter) {
+            if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
+            if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
+        }
+        if (type === 'issue') url += `status=issue&`;
+        if (type === 'blocked') url += `status=blocked&`;
         if (type === 'fail') url += `status=Fail&`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error('無法取得案件資料');
         const data = await res.json();
-        
-        currentReportsList = data; // 存入全域供 viewReportDetails 使用
         
         const twToday = getTaiwanToday();
         const twFirstDay = getTaiwanFirstDay();
@@ -874,12 +907,32 @@ async function showDashboardDetails(type) {
                 const inDate = (start_date || end_date) ? true : (r.test_date === twToday);
                 return inDate && r.case_no && r.case_no.startsWith('P');
             });
+        } else if (type === 'issue') {
+            title = '未解決案件（Fail / Blocked）· 不限日期';
+            filtered = sortReportsOpenFirst(filterIssueReports(data));
+            if (filtered.length === 0) {
+                filtered = sortReportsOpenFirst(await fetchOpenIssueReports());
+            }
         } else if (type === 'blocked') {
-            title = '阻礙中 (Blocked) 案件清單';
-            filtered = data; // API已篩選
+            title = '阻礙中 (Blocked) 案件清單（不限日期）';
+            filtered = filterIssueReports(data).filter(r => isReportBlockedOnlyStatus(r.status));
+            if (filtered.length === 0) {
+                filtered = sortReportsOpenFirst(await fetchOpenIssueReports())
+                    .filter(r => isReportBlockedOnlyStatus(r.status));
+            }
         } else if (type === 'fail') {
-            title = '測試失敗 (Fail) 案件清單';
-            filtered = data; // API已篩選
+            title = '測試失敗 (Fail) 案件清單（不限日期）';
+            filtered = data.filter(r => r.status === 'Fail');
+            if (filtered.length === 0) {
+                filtered = sortReportsOpenFirst(await fetchOpenIssueReports())
+                    .filter(r => r.status === 'Fail');
+            }
+        }
+        
+        if (filtered.length > 0) {
+            currentReportsList = mergeReportsById(currentReportsList, filtered);
+        } else if (data.length > 0) {
+            currentReportsList = mergeReportsById(currentReportsList, data);
         }
         
         titleEl.textContent = title;
@@ -912,6 +965,12 @@ async function showDashboardDetails(type) {
         console.error(err);
         tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
     }
+}
+
+function closeDashboardDetails() {
+    dashboardCurrentDetailType = null;
+    dashboardIssueDismissed = true;
+    document.getElementById('dashboard-details-container')?.classList.add('hidden');
 }
 
 function renderTesterCheckboxes(testerStats) {
@@ -1319,6 +1378,7 @@ async function submitReport(e) {
             category: payload.category,
             raw_ticket: payload.raw_ticket,
             notes: payload.notes,
+            is_pinned: isReportIssueStatus(payload.status) ? 1 : 0,
         });
 
         if (viewingReportId === savedId) {
@@ -2040,7 +2100,7 @@ function renderCharts(dailyData, statusData) {
     const colors = labels.map(l => {
         if (l === 'Pass') return '#10b981';
         if (l === 'Fail') return '#ef4444';
-        if (l === 'Blocked') return '#f59e0b';
+        if (l === 'Blocked' || l === 'BLOCKED') return '#f59e0b';
         return '#6b7280';
     });
 
@@ -2495,8 +2555,12 @@ async function togglePin(id, currentPinned) {
         showToast('您無權釘選其他測試員的報告', true);
         return;
     }
-    const token = localStorage.getItem('qa_session_token');
     const newPinned = currentPinned === 1 ? 0 : 1;
+    if (newPinned === 0 && report && isReportIssueStatus(report.status)) {
+        showToast('阻礙/失敗案件須變更狀態後才會解除置頂', true);
+        return;
+    }
+    const token = localStorage.getItem('qa_session_token');
     try {
         const res = await fetch(`${API_BASE}/api/reports/pin`, {
             method: 'POST',
@@ -2540,8 +2604,7 @@ function refreshViewReportModal(id) {
         remarkEl.className = 'view-tester-remark-text is-empty';
     }
 
-    const notesWithoutRemark = getNotesWithoutTesterRemark(report.notes);
-    document.getElementById('view-generated-notes').value = notesWithoutRemark || '無測試紀錄內容';
+    document.getElementById('view-generated-notes').value = getNotesWithoutTesterRemark(report.notes) || '無測試紀錄內容';
 
     const editBtn = document.getElementById('view-edit-report-btn');
     if (editBtn) editBtn.classList.toggle('hidden', !canUserModifyReport(report));
@@ -2602,6 +2665,199 @@ function copyTicketTemplate() {
 }
 
 
+function isReportIssueStatus(status) {
+    const s = String(status || '');
+    if (s === 'Fail') return true;
+    return s.toUpperCase() === 'BLOCKED';
+}
+
+function isReportBlockedOnlyStatus(status) {
+    return String(status || '').toUpperCase() === 'BLOCKED';
+}
+
+function filterIssueReports(list) {
+    return (list || []).filter(r => isReportIssueStatus(r.status));
+}
+
+function mergeReportsById(...lists) {
+    const seen = new Set();
+    const merged = [];
+    for (const list of lists) {
+        for (const r of list || []) {
+            if (!r || seen.has(r.id)) continue;
+            seen.add(r.id);
+            merged.push(r);
+        }
+    }
+    return merged;
+}
+
+async function fetchOpenIssueReports() {
+    const fetchByStatus = async (status) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/reports?status=${encodeURIComponent(status)}`);
+            if (!res.ok) return [];
+            return await res.json();
+        } catch {
+            return [];
+        }
+    };
+
+    const issueData = filterIssueReports(await fetchByStatus('issue'));
+    if (issueData.length > 0) return issueData;
+
+    return filterIssueReports(mergeReportsById(
+        await fetchByStatus('blocked'),
+        await fetchByStatus('BLOCKED'),
+        await fetchByStatus('Fail')
+    ));
+}
+
+function sortReportsOpenFirst(list) {
+    return (list || []).slice().sort((a, b) => {
+        const rank = (r) => {
+            if (isReportIssueStatus(r.status)) return 2;
+            if (r.is_pinned === 1) return 1;
+            return 0;
+        };
+        const diff = rank(b) - rank(a);
+        if (diff !== 0) return diff;
+        const dateA = a.test_date || '';
+        const dateB = b.test_date || '';
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        return (b.id || 0) - (a.id || 0);
+    });
+}
+
+function updateWorkspaceBlockedButton() {
+    const btn = document.getElementById('ws-filter-blocked-btn');
+    const labelEl = document.getElementById('ws-filter-blocked-label');
+    const countEl = document.getElementById('ws-filter-blocked-count');
+    if (!btn || !labelEl || !countEl) return;
+
+    const count = wsBlockedCount;
+    countEl.textContent = count === null ? '…' : String(count);
+
+    if (wsShowBlockedOnly) {
+        btn.className = 'inline-flex items-center gap-1.5 text-sm font-bold transition px-3 py-1 rounded border border-amber-500 bg-amber-500 text-white shadow-sm';
+        labelEl.textContent = '篩選中：阻礙 / 失敗';
+        countEl.className = 'inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5 bg-white/25 text-white';
+        btn.title = '點一下返回日期篩選';
+    } else {
+        btn.className = 'inline-flex items-center gap-1.5 text-sm font-medium transition px-3 py-1 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm';
+        labelEl.textContent = '阻礙 / 失敗';
+        if (count === null) {
+            countEl.className = 'inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5 bg-gray-100 text-gray-400';
+        } else if (count > 0) {
+            countEl.className = 'inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5 bg-amber-100 text-amber-800';
+        } else {
+            countEl.className = 'inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5 bg-gray-100 text-gray-400';
+        }
+        btn.title = count === 0 ? '目前沒有阻礙或失敗的案件' : `查看全部 ${count} 件阻礙 / 失敗案件（不限日期）`;
+    }
+
+    const startInput = document.getElementById('ws-filter-date-start');
+    const endInput = document.getElementById('ws-filter-date-end');
+    const dateMuted = wsShowBlockedOnly ? 'opacity-45 pointer-events-none' : '';
+    if (startInput) startInput.className = `border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary ${dateMuted}`.trim();
+    if (endInput) endInput.className = `border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary ${dateMuted}`.trim();
+}
+
+async function refreshWorkspaceBlockedCount() {
+    const cacheCount = filterIssueReports(currentReportsList).length;
+    if (wsBlockedCount === null) {
+        wsBlockedCount = cacheCount;
+        updateWorkspaceBlockedButton();
+    }
+
+    try {
+        const list = await fetchWorkspaceBlockedReports();
+        wsBlockedCount = list.length;
+        if (wsShowBlockedOnly) wsBlockedReportsList = list;
+    } catch (err) {
+        console.warn('refreshWorkspaceBlockedCount', err);
+        wsBlockedCount = cacheCount;
+    }
+    updateWorkspaceBlockedButton();
+}
+
+async function fetchWorkspaceBlockedReports() {
+    const displayName = localStorage.getItem('qa_display_name');
+    if (!displayName) return [];
+    const testerParam = `tester=${encodeURIComponent(displayName)}`;
+
+    const fetchByStatus = async (status) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/reports?${testerParam}&status=${encodeURIComponent(status)}`);
+            if (!res.ok) return [];
+            return await res.json();
+        } catch {
+            return [];
+        }
+    };
+
+    const issueData = filterIssueReports(await fetchByStatus('issue'));
+    if (issueData.length > 0) return issueData;
+
+    const merged = mergeReportsById(
+        await fetchByStatus('blocked'),
+        await fetchByStatus('BLOCKED'),
+        await fetchByStatus('Fail')
+    );
+    const fromPartial = filterIssueReports(merged);
+    if (fromPartial.length > 0) return fromPartial;
+
+    const fromCache = filterIssueReports(currentReportsList);
+    try {
+        const resAll = await fetch(`${API_BASE}/api/reports?${testerParam}`);
+        if (!resAll.ok) {
+            if (fromCache.length > 0) return fromCache;
+            throw new Error('無法載入阻礙 / 失敗案件');
+        }
+        const fromAll = filterIssueReports(await resAll.json());
+        return mergeReportsById(fromAll, fromCache);
+    } catch (err) {
+        if (fromCache.length > 0) return fromCache;
+        throw err;
+    }
+}
+
+async function toggleWorkspaceBlockedView() {
+    wsShowBlockedOnly = !wsShowBlockedOnly;
+    updateWorkspaceBlockedButton();
+
+    if (wsShowBlockedOnly) {
+        const tbody = document.getElementById('ws-recent-reports-body');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">載入阻礙 / 失敗案件中...</td></tr>';
+        try {
+            wsBlockedReportsList = await fetchWorkspaceBlockedReports();
+            wsBlockedCount = wsBlockedReportsList.length;
+            if (wsBlockedCount === 0) {
+                wsShowBlockedOnly = false;
+                wsBlockedReportsList = null;
+                updateWorkspaceBlockedButton();
+                showToast('目前沒有阻礙或失敗的案件');
+                renderWorkspaceTable();
+                return;
+            }
+        } catch (err) {
+            console.error(err);
+            wsShowBlockedOnly = false;
+            wsBlockedReportsList = null;
+            updateWorkspaceBlockedButton();
+            showToast(err.message, true);
+            renderWorkspaceTable();
+            return;
+        }
+    } else {
+        wsBlockedReportsList = null;
+    }
+
+    updateWorkspaceBlockedButton();
+    wsCurrentPage = 1;
+    renderWorkspaceTable();
+}
+
 function renderWorkspaceTable() {
     renderWorkspaceAdminModifiedTable();
     
@@ -2609,32 +2865,37 @@ function renderWorkspaceTable() {
     if (!tbody) return;
     tbody.innerHTML = '';
     
-    let filteredData = currentReportsList || [];
+    let filteredData = wsShowBlockedOnly
+        ? filterIssueReports(wsBlockedReportsList !== null ? wsBlockedReportsList : currentReportsList)
+        : (currentReportsList || []);
     
     const startInput = document.getElementById('ws-filter-date-start');
     const endInput = document.getElementById('ws-filter-date-end');
     const start = startInput ? startInput.value : '';
     const end = endInput ? endInput.value : '';
     
-    if (start || end) {
+    if (!wsShowBlockedOnly && (start || end)) {
         filteredData = filteredData.filter(r => {
-            if (r.is_pinned === 1) return true;
+            if (r.is_pinned === 1 || isReportIssueStatus(r.status)) return true;
             if (!r.test_date) return false;
             if (start && r.test_date < start) return false;
             if (end && r.test_date > end) return false;
             return true;
         });
     }
+
+    filteredData = sortReportsOpenFirst(filteredData);
     
     const typeVal = document.getElementById('ws-filter-type') ? document.getElementById('ws-filter-type').value : 'all';
-    if (typeVal === 'P') filteredData = filteredData.filter(r => r.is_pinned === 1 || (r.case_no && r.case_no.startsWith('P')));
-    if (typeVal === 'T') filteredData = filteredData.filter(r => r.is_pinned === 1 || (r.case_no && r.case_no.startsWith('T')));
+    if (typeVal === 'P') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || (r.case_no && r.case_no.startsWith('P')));
+    if (typeVal === 'T') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || (r.case_no && r.case_no.startsWith('T')));
     
     const catVal = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
-    if (catVal !== 'all') filteredData = filteredData.filter(r => r.is_pinned === 1 || r.category === catVal);
+    if (catVal !== 'all') filteredData = filteredData.filter(r => r.is_pinned === 1 || isReportIssueStatus(r.status) || r.category === catVal);
 
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">尚無測試紀錄</td></tr>';
+        const emptyMsg = wsShowBlockedOnly ? '目前沒有阻礙或失敗的案件' : '尚無測試紀錄';
+        tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">${emptyMsg}</td></tr>`;
         document.getElementById('ws-pagination').innerHTML = '';
         return;
     }
@@ -2670,13 +2931,19 @@ function renderWorkspaceTable() {
                 displayTester = displayTester.replace(/ - (.*?)-更/g, ' <span class="text-red-500 font-bold">-$1-更</span>');
             }
 
+        const dateSuffix = wsShowBlockedOnly && report.test_date
+            ? `<span class="text-xs text-gray-400 block mt-0.5 pl-6">${escapeHtml(report.test_date)}</span>`
+            : '';
+
         tr.innerHTML = `
-            <td class="px-3 py-4 text-sm text-gray-500 case-no-col">${getCaseNoCellHtml(report, { starSvg })}</td>
+            <td class="px-3 py-4 text-sm text-gray-500 case-no-col">
+                ${getCaseNoCellHtml(report, { starSvg })}
+                ${dateSuffix}
+            </td>
             <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                 ${getProjectNameCellHtml(report.project_name, report.category)}
             </td>
             <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-3 py-4 qa-remark-col">${getTesterRemarkCellHtml(report)}</td>
             <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
@@ -2691,7 +2958,6 @@ function renderWorkspaceTable() {
     for (let i = 0; i < emptyRowsCount; i++) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
@@ -2968,6 +3234,9 @@ document.addEventListener('click', function(e) {
 
 
 function clearWorkspaceDate() {
+    wsShowBlockedOnly = false;
+    wsBlockedReportsList = null;
+    updateWorkspaceBlockedButton();
     document.getElementById('ws-filter-date-start').value = getTaiwanToday();
     document.getElementById('ws-filter-date-end').value = getTaiwanToday();
     filterWorkspaceReports();

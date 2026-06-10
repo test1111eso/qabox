@@ -60,7 +60,8 @@
     color: #991b1b;
 }
 
-.status-Blocked {
+.status-Blocked,
+.status-BLOCKED {
     background-color: #fef3c7;
     color: #92400e;
 }
@@ -153,26 +154,6 @@
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     white-space: nowrap;
-}
-
-.qa-remark-col {
-    overflow: hidden;
-    text-align: left;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-}
-
-.qa-remark-text {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-}
-
-.compact-report-table .qa-remark-col {
-    overflow: hidden;
 }
 
 .project-name-cell {

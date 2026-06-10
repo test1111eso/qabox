@@ -152,8 +152,15 @@ export default {
           params.push(tester, `${tester} - %-更`, `% - ${tester}-更`);
         }
         if (statusParam) {
-          query += ' AND status = ?';
-          params.push(statusParam);
+          const statusLower = String(statusParam).toLowerCase();
+          if (statusLower === 'issue') {
+            query += " AND (status = 'Fail' OR status = 'BLOCKED' OR status = 'Blocked')";
+          } else if (statusLower === 'blocked') {
+            query += " AND (status = 'BLOCKED' OR status = 'Blocked')";
+          } else {
+            query += ' AND status = ?';
+            params.push(statusParam);
+          }
         }
         if (date) {
           query += ' AND test_date = ?';
@@ -169,7 +176,8 @@ export default {
           }
         }
         
-        query += ' ORDER BY is_pinned DESC, test_date DESC, created_at DESC LIMIT 100';
+        query += ' ORDER BY is_pinned DESC, test_date DESC, created_at DESC LIMIT ' +
+          (statusParam && ['blocked', 'issue'].includes(String(statusParam).toLowerCase()) ? '300' : '100');
         
         const { results } = await env.DB.prepare(query).bind(...params).all();
         return new Response(JSON.stringify(results), {
@@ -236,10 +244,12 @@ export default {
       if (url.pathname === '/api/reports' && request.method === 'POST') {
         const body = await request.json();
         const { case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
-        
+        const isOpenIssue = status === 'Fail' || status === 'BLOCKED' || status === 'Blocked';
+        const isPinned = isOpenIssue ? 1 : 0;
+
         const result = await env.DB.prepare(
-          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))"
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null).run();
+          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+8 hours'))"
+        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, isPinned).run();
         
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -286,9 +296,16 @@ export default {
           updatedNotes = notes.replace(new RegExp(`(測試人員\\s*[：:]\\s*)${tester_name}`), `$1${finalTesterName}`);
         }
 
+        const isOpenIssue = status === 'Fail' || status === 'BLOCKED' || status === 'Blocked';
+        const nextPinned = isOpenIssue ? 1 : (status === 'Pass' ? 0 : report.is_pinned);
+
         await env.DB.prepare(
-          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ? WHERE id = ?'
-        ).bind(case_no, project_name, finalTesterName, test_date, status, bug_link, updatedNotes, category || '其他', raw_ticket || null, id).run();
+          'UPDATE reports SET case_no = ?, project_name = ?, tester_name = ?, test_date = ?, status = ?, bug_link = ?, notes = ?, category = ?, raw_ticket = ?, is_pinned = ? WHERE id = ?'
+        ).bind(
+          case_no, project_name, finalTesterName, test_date, status, bug_link, updatedNotes, category || '其他', raw_ticket || null,
+          nextPinned,
+          id
+        ).run();
         
         return new Response(JSON.stringify({ success: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -311,6 +328,11 @@ export default {
 
         if (user.role !== 'admin' && user.display_name !== report.tester_name.split(' - ')[0]) {
           return new Response(JSON.stringify({ error: '您無權釘選其他測試員的報告' }), { status: 403, headers: corsHeaders });
+        }
+
+        const isOpenIssue = report.status === 'Fail' || report.status === 'BLOCKED' || report.status === 'Blocked';
+        if (!is_pinned && isOpenIssue) {
+          return new Response(JSON.stringify({ error: '阻礙/失敗案件須變更狀態後才會解除置頂' }), { status: 400, headers: corsHeaders });
         }
         
         await env.DB.prepare('UPDATE reports SET is_pinned = ? WHERE id = ?').bind(is_pinned ? 1 : 0, id).run();
@@ -544,6 +566,10 @@ export default {
 
       // 4. 取得統計數據 (每日測試數量、各狀態總計、T/P單數)
       if (url.pathname === '/api/stats' && request.method === 'GET') {
+        await env.DB.prepare(
+          `UPDATE reports SET is_pinned = 1 WHERE is_deleted = 0 AND (status = 'Fail' OR status = 'BLOCKED' OR status = 'Blocked')`
+        ).run();
+
         const start_date = url.searchParams.get('start_date');
         const end_date = url.searchParams.get('end_date');
 
@@ -616,6 +642,13 @@ export default {
           `SELECT COUNT(*) as count ${totalQueryBase}`
         ).bind(...totalParams).first();
 
+        const openBlocked = await env.DB.prepare(
+          `SELECT COUNT(*) as count FROM reports WHERE is_deleted = 0 AND (status = 'BLOCKED' OR status = 'Blocked')`
+        ).first();
+        const openFail = await env.DB.prepare(
+          `SELECT COUNT(*) as count FROM reports WHERE is_deleted = 0 AND status = 'Fail'`
+        ).first();
+
 
 
         const day = twDate.getDay();
@@ -675,7 +708,9 @@ export default {
           dailyStats: dailyStats.results,
           testerStats: testerStats.results,
           typeStats: typeStats,
-          monthTotal: monthTotal.count
+          monthTotal: monthTotal.count,
+          openBlockedCount: openBlocked.count,
+          openFailCount: openFail.count,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

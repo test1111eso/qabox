@@ -234,6 +234,13 @@
                             <input type="date" id="ws-filter-date-end" onchange="filterWorkspaceReports()"
                                 class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
                             <button onclick="clearWorkspaceDate()" class="text-sm text-gray-500 hover:text-primary transition bg-white hover:bg-gray-100 px-3 py-1 rounded border border-gray-300 shadow-sm ml-1">清除</button>
+                            <button type="button" id="ws-filter-blocked-btn" onclick="toggleWorkspaceBlockedView()"
+                                title="列出所有日期的阻礙 / 失敗案件"
+                                class="inline-flex items-center gap-1.5 text-sm transition px-3 py-1 rounded border shadow-sm">
+                                <span id="ws-filter-blocked-label">阻礙 / 失敗</span>
+                                <span id="ws-filter-blocked-count"
+                                    class="inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5">…</span>
+                            </button>
 
 
                             <select id="ws-filter-type" onchange="renderWorkspaceTable()"
@@ -262,7 +269,6 @@
                                 <col style="width:158px">
                                 <col>
                                 <col style="width:96px">
-                                <col style="width:120px">
                                 <col style="width:96px">
                                 <col style="width:140px">
                             </colgroup>
@@ -278,9 +284,6 @@
                                         class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         類型</th>
                                     <th
-                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        測試員備註</th>
-                                    <th
                                         class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                         狀態</th>
                                     <th
@@ -290,7 +293,7 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200" id="ws-recent-reports-body">
                                 <tr>
-                                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td>
+                                    <td colspan="5" class="px-6 py-4 text-center text-gray-500">載入中...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -399,7 +402,7 @@
                         <div class="px-5 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                             <h3 class="font-bold text-gray-800" id="dashboard-details-title">案件清單</h3>
                             <button
-                                onclick="document.getElementById('dashboard-details-container').classList.add('hidden')"
+                                onclick="closeDashboardDetails()"
                                 class="text-gray-400 hover:text-gray-600">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
