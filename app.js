@@ -1006,7 +1006,7 @@ async function fetchReports() {
 
     try {
         const tbody = document.getElementById('reports-table-body');
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
         
         const res = await fetch(url);
         if (!res.ok) throw new Error('API 無法連線');
@@ -1020,7 +1020,7 @@ async function fetchReports() {
         console.error(err);
         const tbody = document.getElementById('reports-table-body');
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">載入失敗：${escapeHtml(err.message)}</td></tr>`;
         }
     }
 }
@@ -2632,7 +2632,7 @@ function renderReportsTable() {
     }
 
     if (filteredData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
         document.getElementById('reports-pagination').innerHTML = '';
         return;
     }
@@ -2681,7 +2681,6 @@ function renderReportsTable() {
             </td>
             <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 tester-col" title="${escapeHtml(report.tester_name || '')}">${displayTester}</td>
             <td class="px-3 py-4 type-col">${getTypeTagHtml(report.case_no)}</td>
-            <td class="px-3 py-4 qa-remark-col">${getTesterRemarkCellHtml(report)}</td>
             <td class="px-3 py-4 status-col">
                 <span class="status-badge status-${report.status}">${report.status}</span>
             </td>
@@ -2694,7 +2693,6 @@ function renderReportsTable() {
     for (let i = 0; i < emptyRowsCountReports; i++) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-transparent pointer-events-none select-none">-</td>
