@@ -1413,6 +1413,11 @@ function copyReportNotes(id) {
     // 解析歷史報告欄位
     loadReportFormFromReport(report);
 
+    // 立即同步左邊至右邊，確保複製時新案號、新日期等立即反映在右側預覽中
+    syncPreviewHeaderFields();
+    syncPreviewMiddleFields();
+    syncPreviewTailFields();
+
     showToast('已複製報告內容為新範本，修改完案件編號即可儲存！');
 }
 
@@ -1451,6 +1456,11 @@ function editReport(id) {
 
     // 解析歷史報告欄位
     loadReportFormFromReport(report);
+
+    // 立即同步左邊至右邊，確保編輯時載入的值即時更新至右側預覽中
+    syncPreviewHeaderFields();
+    syncPreviewMiddleFields();
+    syncPreviewTailFields();
 }
 
 // 刪除測試報告
@@ -2011,19 +2021,32 @@ function parseGrafanaVersion() {
 
 function upsertPreviewLine(text, label, value, insertBeforeLabel) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const lineRe = new RegExp(`\\n${escaped}\\s*[：:]\\s*[^\\n]*`);
+    const lineRe = new RegExp(`(^|\\n)(${escaped}\\s*[：:]\\s*[^\\n]*)`, 'i');
 
     if (value) {
+        if (lineRe.test(text)) {
+            return text.replace(lineRe, (match, p1, p2) => {
+                return `${p1}${label}：${value}`;
+            });
+        }
         const line = `\n${label}：${value}`;
-        if (lineRe.test(text)) return text.replace(lineRe, line);
         if (insertBeforeLabel) {
             const beforeEsc = insertBeforeLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const beforeRe = new RegExp(`(\\n${beforeEsc}\\s*[：:])`);
-            if (beforeRe.test(text)) return text.replace(beforeRe, `${line}$1`);
+            const beforeRe = new RegExp(`(^|\\n)(${beforeEsc}\\s*[：:])`, 'i');
+            if (beforeRe.test(text)) {
+                return text.replace(beforeRe, (match, p1, p2) => {
+                    const prefix = p1 === '\n' ? '' : '\n';
+                    return `${prefix}${label}：${value}\n${p2}`;
+                });
+            }
         }
-        return text + line;
+        return text.trimEnd() + line;
     }
-    return text.replace(lineRe, '');
+    
+    if (lineRe.test(text)) {
+        return text.replace(lineRe, '').trim();
+    }
+    return text;
 }
 
 function syncPreviewTailFields() {
@@ -2032,7 +2055,7 @@ function syncPreviewTailFields() {
 
     let text = el.value;
     const stepsVal = document.getElementById('form-steps')?.value.trim() || '';
-    text = upsertPreviewLine(text, '備註', stepsVal, '處理狀態');
+    text = upsertPreviewBlock(text, '備註', stepsVal, '處理狀態');
 
     const riskVal = document.getElementById('form-risk')?.value || '';
     text = upsertPreviewLine(text, '風險評估', riskVal, '通過率(%)');
@@ -2050,9 +2073,79 @@ function syncPreviewTailFields() {
     el.value = text;
 }
 
+function upsertPreviewBlock(text, label, value, insertBeforeLabel) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const knownLabels = '案件編號|專案名稱|測試日期|測試人員|工程人員|母單|子單|軟體版本|測試環境|測試裝置|測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態|工單說明|測試員備註|QA備註';
+    const blockRe = new RegExp(`(^|\\n)(${escaped}\\s*[：:])(?:\\n|.)*?(?=\\n(?:${knownLabels})\\s*[：:]|$)`, 'i');
+
+    if (value) {
+        const hasNewline = value.includes('\n') || label === '測試步驟';
+        if (blockRe.test(text)) {
+            return text.replace(blockRe, (match, p1, p2) => {
+                return `${p1}${label}：${hasNewline ? '\n' : ''}${value}`;
+            });
+        }
+        
+        const block = `\n${label}：${hasNewline ? '\n' : ''}${value}`;
+        if (insertBeforeLabel) {
+            const beforeEsc = insertBeforeLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const beforeRe = new RegExp(`(^|\\n)(${beforeEsc}\\s*[：:])`, 'i');
+            if (beforeRe.test(text)) {
+                return text.replace(beforeRe, (match, p1, p2) => {
+                    const prefix = p1 === '\n' ? '' : '\n';
+                    return `${prefix}${label}：${hasNewline ? '\n' : ''}${value}\n${p2}`;
+                });
+            }
+        }
+        return text.trimEnd() + block;
+    }
+    
+    if (blockRe.test(text)) {
+        return text.replace(blockRe, '').trim();
+    }
+    return text;
+}
+
+function syncPreviewMiddleFields() {
+    const el = document.getElementById('generated-result');
+    if (!el) return;
+
+    let text = el.value;
+
+    const versionVal = document.getElementById('form-version')?.value.trim() || '';
+    text = upsertPreviewBlock(text, '軟體版本', versionVal, '測試環境');
+
+    const envVal = document.getElementById('form-env')?.value.trim() || '';
+    text = upsertPreviewBlock(text, '測試環境', envVal, '測試裝置');
+
+    const deviceVal = document.getElementById('form-device') ? document.getElementById('form-device').value.trim() : '';
+    const isIpad = document.getElementById('chk-ipad') ? document.getElementById('chk-ipad').checked : false;
+    const ipadVersion = document.getElementById('form-ipad-version') ? document.getElementById('form-ipad-version').value.trim() : '';
+    const isIphone = document.getElementById('chk-iphone') ? document.getElementById('chk-iphone').checked : false;
+    const iphoneVersion = document.getElementById('form-iphone-version') ? document.getElementById('form-iphone-version').value.trim() : '';
+    const isOther = document.getElementById('chk-other-device') ? document.getElementById('chk-other-device').checked : false;
+    const otherVersion = document.getElementById('form-other-device') ? document.getElementById('form-other-device').value.trim() : '';
+    let devices = [];
+    if (deviceVal) devices.push(deviceVal);
+    if (isIpad) devices.push(`iPad ${ipadVersion}`.trim());
+    if (isIphone) devices.push(`iPhone ${iphoneVersion}`.trim());
+    if (isOther) devices.push(`${otherVersion}`.trim());
+    const finalDeviceStr = devices.join(' / ');
+    text = upsertPreviewBlock(text, '測試裝置', finalDeviceStr, '測試案例');
+
+    const testCaseVal = document.getElementById('form-test-case')?.value.trim() || '';
+    text = upsertPreviewBlock(text, '測試案例', testCaseVal, '測試步驟');
+
+    const testStepsVal = document.getElementById('form-test-steps')?.value.trim() || '';
+    text = upsertPreviewBlock(text, '測試步驟', testStepsVal, '風險評估');
+
+    el.value = text;
+}
+
 function updateGeneratedResult() {
     if (userEditedFields.has('generated-result')) {
         syncPreviewHeaderFields();
+        syncPreviewMiddleFields();
         syncPreviewTailFields();
         return;
     }
