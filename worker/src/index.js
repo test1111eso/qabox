@@ -897,6 +897,97 @@ export default {
         return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // ===================== UA 代理端點 =====================
+      // 所有 /api/ua/* 路由皆代理轉發至 UA hooks API
+      // 前端需在 X-UA-Token Header 中傳入個人資訊鑰匙 (PAT)
+      const UA_BASE = 'https://ua.1111.com.tw/api/hooks/pat';
+
+      if (url.pathname.startsWith('/api/ua/')) {
+        const uaPat = request.headers.get('X-UA-Token');
+        if (!uaPat) {
+          return new Response(JSON.stringify({ error: '請先設定 UA 個人資訊鑰匙' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        const uaHeaders = {
+          'Content-Type': 'application/json',
+          'X-Personal-Token': uaPat,
+        };
+
+        const uaSubPath = url.pathname.replace('/api/ua', '');
+
+        // GET /api/ua/work → UA /work
+        if (uaSubPath === '/work' && request.method === 'GET') {
+          const uaRes = await fetch(`${UA_BASE}/work`, { method: 'GET', headers: uaHeaders });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // POST /api/ua/plan → UA /plan
+        if (uaSubPath === '/plan' && request.method === 'POST') {
+          const body = await request.text();
+          const uaRes = await fetch(`${UA_BASE}/plan`, { method: 'POST', headers: uaHeaders, body });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // POST /api/ua/task → UA /task
+        if (uaSubPath === '/task' && request.method === 'POST') {
+          const body = await request.text();
+          const uaRes = await fetch(`${UA_BASE}/task`, { method: 'POST', headers: uaHeaders, body });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // GET /api/ua/task/hierarchy/:guid → UA /task/hierarchy/:guid
+        if (uaSubPath.startsWith('/task/hierarchy/') && request.method === 'GET') {
+          const taskGuid = uaSubPath.replace('/task/hierarchy/', '');
+          const uaRes = await fetch(`${UA_BASE}/task/hierarchy/${taskGuid}`, { method: 'GET', headers: uaHeaders });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // POST /api/ua/discuss → UA /discuss
+        if (uaSubPath === '/discuss' && request.method === 'POST') {
+          const body = await request.text();
+          const uaRes = await fetch(`${UA_BASE}/discuss`, { method: 'POST', headers: uaHeaders, body });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        // POST /api/ua/todo → UA /todo
+        if (uaSubPath === '/todo' && request.method === 'POST') {
+          const body = await request.text();
+          const uaRes = await fetch(`${UA_BASE}/todo`, { method: 'POST', headers: uaHeaders, body });
+          const data = await uaRes.json();
+          return new Response(JSON.stringify(data), {
+            status: uaRes.status,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ error: 'UA 代理路徑不存在' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      // ===================== UA 代理端點結束 =====================
+
       return new Response('Not Found', { status: 404, headers: corsHeaders });
     } catch (err) {
       return new Response(err.message, { status: 500, headers: corsHeaders });

@@ -74,6 +74,17 @@
                             id="nav-users">測試員管理</button>
                         <div class="flex items-center gap-2 ml-4 border-l border-gray-600 pl-4">
                             <span id="nav-user-name" class="text-sm font-medium text-gray-300"></span>
+                            <button onclick="openUaSettingsModal()" id="nav-ua-settings-btn" title="UA 個人金鑰設定"
+                                class="text-gray-400 hover:text-purple-300 transition focus:outline-none">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                                    </path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z">
+                                    </path>
+                                </svg>
+                            </button>
                             <button onclick="handleLogout()"
                                 class="text-sm text-red-400 hover:text-red-300 transition font-medium">登出</button>
                         </div>
@@ -847,6 +858,15 @@
                                 class="hidden text-xs bg-indigo-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-indigo-700 transition shadow-sm font-medium">
                                 修改
                             </button>
+                            <button id="view-ua-publish-btn" onclick="openUaPublishModal()"
+                                class="text-xs bg-purple-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-purple-700 transition shadow-sm font-medium">
+                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                    </path>
+                                </svg>
+                                發布至工單
+                            </button>
                             <button onclick="copyViewReportNotes()"
                                 class="text-xs bg-primary text-white px-3 py-1.5 rounded flex items-center hover:bg-blue-600 transition shadow-sm font-medium">
                                 <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1464,6 +1484,122 @@
                 </div>
             </div>
         </div>
+
+        <!-- Modal: UA 個人金鑰設定 -->
+        <div id="ua-settings-modal"
+            class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z">
+                            </path>
+                        </svg>
+                        UA 個人金鑰設定
+                    </h3>
+                    <button onclick="closeUaSettingsModal()"
+                        class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-gray-500 mb-4">
+                        輸入您的 UA 個人資訊鑰匙（PAT）以啟用一鍵發布至工單功能。<br>
+                        <span class="text-xs text-gray-400 mt-1 block">金鑰將儲存於此瀏覽器本機，不會上傳至伺服器。</span>
+                    </p>
+                    <div class="mb-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">個人資訊鑰匙（PAT）</label>
+                        <input type="password" id="ua-pat-input" autocomplete="off"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
+                            placeholder="輸入您的 PAT...">
+                    </div>
+                    <div id="ua-settings-status" class="text-xs mb-1 hidden"></div>
+                </div>
+                <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <button onclick="clearUaPat()"
+                        class="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition font-medium">清除金鑰</button>
+                    <div class="flex gap-2">
+                        <button onclick="closeUaSettingsModal()"
+                            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium text-sm transition">取消</button>
+                        <button onclick="saveUaSettings()"
+                            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm transition shadow-sm">儲存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: 發布至 UA 工單 -->
+        <div id="ua-publish-modal"
+            class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                            </path>
+                        </svg>
+                        發布測試紀錄至 UA 工單
+                    </h3>
+                    <button onclick="closeUaPublishModal()"
+                        class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto flex-1">
+                    <!-- Loading state -->
+                    <div id="ua-publish-loading" class="text-center py-8 text-gray-500">
+                        <svg class="w-8 h-8 mx-auto mb-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="animation: spin 1s linear infinite">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                            </path>
+                        </svg>
+                        <p class="text-sm">載入待辦工單中...</p>
+                    </div>
+                    <!-- Work items list -->
+                    <div id="ua-work-items-list" class="hidden space-y-2">
+                        <!-- Populated by JS -->
+                    </div>
+                    <!-- Empty state -->
+                    <div id="ua-publish-empty" class="hidden text-center py-8 text-gray-400">
+                        <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                            </path>
+                        </svg>
+                        <p class="text-sm">目前沒有待辦中或進行中的工單</p>
+                    </div>
+                </div>
+                <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+                    <p class="text-xs text-gray-400" id="ua-publish-hint">選擇要發布的目標工單，再點擊「發布」</p>
+                    <div class="flex gap-2">
+                        <button onclick="closeUaPublishModal()"
+                            class="px-4 py-2 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition">取消</button>
+                        <button onclick="confirmUaPublish()" id="ua-publish-confirm-btn"
+                            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-sm transition shadow-sm"
+                            disabled style="opacity:0.5;cursor:not-allowed">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                </path>
+                            </svg>
+                            發布
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Scripts -->
         <script src="app.js?v=20260603_7"></script>
 </body>

@@ -4106,3 +4106,269 @@ function renderWorkspaceCalendar(reports, year, month) {
     
     grid.innerHTML = html;
 }
+
+// ================= UA 一鍵發布工單整合 =================
+// PAT 儲存於 localStorage，key 為 ua_personal_token
+// 以 userId 為 key 支援多使用者（{ userId: pat }）
+
+const UA_PAT_STORAGE_KEY = 'ua_personal_token_map';
+
+function getUaPat() {
+    const userId = localStorage.getItem('qa_user_id') || 'default';
+    try {
+        const map = JSON.parse(localStorage.getItem(UA_PAT_STORAGE_KEY) || '{}');
+        return map[userId] || '';
+    } catch {
+        return '';
+    }
+}
+
+function setUaPat(pat) {
+    const userId = localStorage.getItem('qa_user_id') || 'default';
+    try {
+        const map = JSON.parse(localStorage.getItem(UA_PAT_STORAGE_KEY) || '{}');
+        if (pat) {
+            map[userId] = pat;
+        } else {
+            delete map[userId];
+        }
+        localStorage.setItem(UA_PAT_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+        // ignore
+    }
+}
+
+// --- 設定 Modal ---
+function openUaSettingsModal() {
+    const pat = getUaPat();
+    const input = document.getElementById('ua-pat-input');
+    input.value = pat ? '••••••••' : '';
+    input.placeholder = pat ? '已設定（重新輸入以覆蓋）' : '輸入您的 PAT...';
+
+    const statusEl = document.getElementById('ua-settings-status');
+    statusEl.classList.add('hidden');
+
+    if (pat) {
+        statusEl.textContent = '✅ 已設定個人資訊鑰匙';
+        statusEl.className = 'text-xs mb-1 text-green-600';
+        statusEl.classList.remove('hidden');
+    }
+
+    document.getElementById('ua-settings-modal').classList.remove('hidden');
+}
+
+function closeUaSettingsModal() {
+    document.getElementById('ua-settings-modal').classList.add('hidden');
+}
+
+function saveUaSettings() {
+    const input = document.getElementById('ua-pat-input');
+    const val = input.value.trim();
+    if (!val || val === '••••••••') {
+        showToast('請輸入有效的個人資訊鑰匙', true);
+        return;
+    }
+    setUaPat(val);
+    const statusEl = document.getElementById('ua-settings-status');
+    statusEl.textContent = '✅ 已儲存';
+    statusEl.className = 'text-xs mb-1 text-green-600';
+    statusEl.classList.remove('hidden');
+    showToast('UA 個人金鑰已儲存！');
+    setTimeout(() => closeUaSettingsModal(), 800);
+}
+
+function clearUaPat() {
+    setUaPat('');
+    showToast('UA 個人金鑰已清除');
+    closeUaSettingsModal();
+}
+
+// --- 發布 Modal ---
+// 選中的發布目標：{ guid, kind, title, toDoGuid }
+let uaSelectedTarget = null;
+
+async function openUaPublishModal() {
+    const pat = getUaPat();
+    if (!pat) {
+        showToast('請先設定 UA 個人資訊鑰匙（點選導覽列齒輪圖示）', true);
+        openUaSettingsModal();
+        return;
+    }
+
+    uaSelectedTarget = null;
+    const confirmBtn = document.getElementById('ua-publish-confirm-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.5';
+    confirmBtn.style.cursor = 'not-allowed';
+
+    document.getElementById('ua-publish-loading').classList.remove('hidden');
+    document.getElementById('ua-work-items-list').classList.add('hidden');
+    document.getElementById('ua-publish-empty').classList.add('hidden');
+    document.getElementById('ua-publish-modal').classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/api/ua/work`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-UA-Token': pat,
+            }
+        });
+        const data = await res.json();
+
+        document.getElementById('ua-publish-loading').classList.add('hidden');
+
+        if (!res.ok) {
+            showToast(data.error || 'UA API 回應錯誤', true);
+            closeUaPublishModal();
+            return;
+        }
+
+        const items = (data.payload || []);
+        if (items.length === 0) {
+            document.getElementById('ua-publish-empty').classList.remove('hidden');
+            return;
+        }
+
+        renderUaWorkItems(items);
+        document.getElementById('ua-work-items-list').classList.remove('hidden');
+    } catch (err) {
+        document.getElementById('ua-publish-loading').classList.add('hidden');
+        showToast('無法載入待辦工單：' + err.message, true);
+        closeUaPublishModal();
+    }
+}
+
+function closeUaPublishModal() {
+    uaSelectedTarget = null;
+    document.getElementById('ua-publish-modal').classList.add('hidden');
+}
+
+/**
+ * 渲染工單列表
+ * kind=1 母單（執行規劃），kind=2 子單（任務調控）
+ * 每個 item 可能同時是待辦（toDoGuid）
+ */
+function renderUaWorkItems(items) {
+    const listEl = document.getElementById('ua-work-items-list');
+    listEl.innerHTML = '';
+
+    // kind=1 放前面（母單）
+    const sorted = [...items].sort((a, b) => a.kind - b.kind);
+
+    sorted.forEach(item => {
+        const kindLabel = item.kind === 1 ? '母單' : '子單';
+        const kindColor = item.kind === 1
+            ? 'bg-blue-100 text-blue-700 border-blue-300'
+            : 'bg-green-100 text-green-700 border-green-300';
+        const cardId = `ua-item-${item.guid}`;
+
+        const div = document.createElement('div');
+        div.id = cardId;
+        div.className = 'border border-gray-200 rounded-lg px-4 py-3 cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition select-none';
+        div.innerHTML = `
+            <div class="flex items-start gap-3">
+                <span class="mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border ${kindColor}">${kindLabel}</span>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-800 truncate">${escapeHtml(item.title || '（無標題）')}</p>
+                    ${item.subtitle ? `<p class="text-xs text-gray-500 mt-0.5 truncate">${escapeHtml(item.subtitle)}</p>` : ''}
+                </div>
+                <div class="shrink-0 w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center ua-radio-dot" style="margin-top:2px"></div>
+            </div>
+        `;
+        div.addEventListener('click', () => selectUaTarget(item));
+        listEl.appendChild(div);
+    });
+}
+
+function selectUaTarget(item) {
+    uaSelectedTarget = item;
+
+    // 重置所有卡片樣式
+    document.querySelectorAll('#ua-work-items-list > div').forEach(el => {
+        el.classList.remove('border-purple-500', 'bg-purple-50', 'ring-2', 'ring-purple-400');
+        el.classList.add('border-gray-200');
+        const dot = el.querySelector('.ua-radio-dot');
+        if (dot) {
+            dot.style.borderColor = '#d1d5db';
+            dot.innerHTML = '';
+        }
+    });
+
+    // 標記選中
+    const selected = document.getElementById(`ua-item-${item.guid}`);
+    if (selected) {
+        selected.classList.remove('border-gray-200');
+        selected.classList.add('border-purple-500', 'bg-purple-50', 'ring-2', 'ring-purple-400');
+        const dot = selected.querySelector('.ua-radio-dot');
+        if (dot) {
+            dot.style.borderColor = '#9333ea';
+            dot.innerHTML = '<svg class="w-3 h-3 text-purple-600" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>';
+        }
+    }
+
+    const confirmBtn = document.getElementById('ua-publish-confirm-btn');
+    confirmBtn.disabled = false;
+    confirmBtn.style.opacity = '1';
+    confirmBtn.style.cursor = 'pointer';
+
+    const kindLabel = item.kind === 1 ? '母單' : '子單';
+    document.getElementById('ua-publish-hint').textContent = `已選：${kindLabel}「${item.title}」`;
+}
+
+async function confirmUaPublish() {
+    if (!uaSelectedTarget) return;
+    const pat = getUaPat();
+    if (!pat) {
+        showToast('請先設定 UA 個人資訊鑰匙', true);
+        return;
+    }
+
+    // 取得目前查看的報告內容
+    const reportContent = document.getElementById('view-generated-notes')?.value || '';
+    if (!reportContent || reportContent === '無測試紀錄內容') {
+        showToast('無法取得測試紀錄內容', true);
+        return;
+    }
+
+    const confirmBtn = document.getElementById('ua-publish-confirm-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.6';
+    const originalText = confirmBtn.innerHTML;
+    confirmBtn.innerHTML = '發布中...';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/ua/discuss`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-UA-Token': pat,
+            },
+            body: JSON.stringify({
+                toDoGuid: uaSelectedTarget.toDoGuid,
+                guid: uaSelectedTarget.guid,
+                kind: uaSelectedTarget.kind,
+                content: reportContent,
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && (data.statu === 1 || data.status === 1 || data.success)) {
+            showToast(`✅ 已成功發布至${uaSelectedTarget.kind === 1 ? '母單' : '子單'}「${uaSelectedTarget.title}」！`);
+            closeUaPublishModal();
+        } else {
+            const msg = data.errMsg || data.error || data.message || '發布失敗，請稍後重試';
+            showToast(msg, true);
+            confirmBtn.disabled = false;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.innerHTML = originalText;
+        }
+    } catch (err) {
+        showToast('發布時發生錯誤：' + err.message, true);
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.innerHTML = originalText;
+    }
+}
+// ================= UA 整合結束 =================
