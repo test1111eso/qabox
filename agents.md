@@ -82,6 +82,12 @@
 - **notes 格式**：結構化文字，含 `案件編號`、`專案名稱`、`測試日期`、`測試人員` 等行；`測試員備註：` 為獨立段落（舊稱 `QA備註`）
 - **歸屬判斷**：優先 `owner_user_id`，fallback 比對 `tester_name` 或 notes 內 `測試人員`
 - **權限**：`canUserModifyReport()` — admin 或報告擁有者可編輯
+- **左右欄位即時同步**：
+  - 在「新增」、「上正式」、「修改」與「複製」模式下，左側表單欄位修改時，右側預覽框（`generated-result`）必須實時同步（透過 `syncPreviewHeaderFields`、`syncPreviewMiddleFields`、`syncPreviewTailFields` 進行局部更新）。
+  - 在「編輯」與「複製」載入資料後，會立即顯式觸發一次這三個同步函數，以防新案號、新日期等變更在 Modal 開啟時未反映在右側。
+- **備註與 QA 備註分離**：
+  - **左側備註**（工單說明，`form-steps`）：為多行 Block，會同步至右側預覽框的 `備註：` 區塊（使用 `upsertPreviewBlock`，而非 `upsertPreviewLine`，以正確處理多行文字）。
+  - **右側 QA 備註**（測試員備註，`form-notes`）：屬於獨立欄位，不在右側預覽框中進行即時預覽，只在儲存時（`prepareNotesForSave`）才拼貼於 final notes 尾端，即 `測試員備註：${remark}`。
 
 ### UI 技術棧
 

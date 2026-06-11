@@ -2035,8 +2035,7 @@ function upsertPreviewLine(text, label, value, insertBeforeLabel) {
             const beforeRe = new RegExp(`(^|\\n)(${beforeEsc}\\s*[：:])`, 'i');
             if (beforeRe.test(text)) {
                 return text.replace(beforeRe, (match, p1, p2) => {
-                    const prefix = p1 === '\n' ? '' : '\n';
-                    return `${prefix}${label}：${value}\n${p2}`;
+                    return `${p1}${label}：${value}\n${p2}`;
                 });
             }
         }
@@ -2092,8 +2091,7 @@ function upsertPreviewBlock(text, label, value, insertBeforeLabel) {
             const beforeRe = new RegExp(`(^|\\n)(${beforeEsc}\\s*[：:])`, 'i');
             if (beforeRe.test(text)) {
                 return text.replace(beforeRe, (match, p1, p2) => {
-                    const prefix = p1 === '\n' ? '' : '\n';
-                    return `${prefix}${label}：${hasNewline ? '\n' : ''}${value}\n${p2}`;
+                    return `${p1}${label}：${hasNewline ? '\n' : ''}${value}\n${p2}`;
                 });
             }
         }
