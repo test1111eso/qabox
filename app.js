@@ -566,6 +566,7 @@ async function loadWorkspace() {
         let failCount = 0;
 
         data.forEach(r => {
+            if (!isReportOwnedByCurrentUser(r)) return;
             if (r.test_date === twToday) todayCount++;
             if (r.test_date && r.test_date.startsWith(twMonthPrefix)) {
                 if (r.case_no && r.case_no.startsWith('T')) monthT++;
@@ -3473,6 +3474,7 @@ function renderWorkspaceCalendar(reports, year, month) {
     // Group reports by date string (YYYY-MM-DD)
     const counts = {};
     reports.forEach(r => {
+        if (!isReportOwnedByCurrentUser(r)) return;
         if (!r.test_date) return;
         counts[r.test_date] = (counts[r.test_date] || 0) + 1;
     });
