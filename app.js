@@ -182,6 +182,15 @@ function syncPreviewHeaderFields() {
     const tester = document.getElementById('form-tester')?.value.trim() || '';
     text = upsertPreviewLine(text, '測試人員', tester, '工程人員');
 
+    const dev = document.getElementById('form-developer')?.value.trim() || '';
+    text = upsertPreviewLine(text, '工程人員', dev, '母單');
+
+    const parentTicket = document.getElementById('form-parent-ticket')?.value.trim() || '';
+    text = upsertPreviewLine(text, '母單', parentTicket, '子單');
+
+    const subTicket = document.getElementById('form-sub-ticket')?.value.trim() || '';
+    text = upsertPreviewLine(text, '子單', subTicket, '軟體版本');
+
     el.value = getNotesWithoutTesterRemark(text);
 }
 
@@ -219,14 +228,6 @@ function getCaseNoCellHtml(report, options = {}) {
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     checkForAppUpdateOnLoad();
-    
-    // 當測試日期變更時，若在新增模式，則自動重新計算案件編號
-    document.getElementById('form-date')?.addEventListener('change', (e) => {
-        const reportId = document.getElementById('form-report-id').value;
-        if (!reportId) {
-            updateNextCaseNo(e.target.value);
-        }
-    });
 });
 
 // Auth Logic
@@ -590,8 +591,6 @@ async function loadWorkspace() {
         
         const startInput = document.getElementById('ws-filter-date-start');
         const endInput = document.getElementById('ws-filter-date-end');
-        if (startInput && !startInput.value) startInput.value = twToday;
-        if (endInput && !endInput.value) endInput.value = twToday;
         
         renderWorkspaceCalendar(data, wsCurrentYear, wsCurrentMonth);
         refreshWorkspaceBlockedCount();
@@ -816,6 +815,7 @@ function clearGeneratorForm() {
         
         // Restore default values
         document.getElementById('form-date').value = getTaiwanToday();
+        updateNextCaseNo(getTaiwanToday());
         document.getElementById('form-test-case').value = '';
         const savedTester = localStorage.getItem('qa_display_name');
         if (savedTester) {
@@ -1264,6 +1264,8 @@ async function fetchReports() {
     if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
     if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
 
+    console.log('[DEBUG] fetchReports URL:', url);
+
     try {
         const tbody = document.getElementById('reports-table-body');
         tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
@@ -1304,6 +1306,27 @@ function setReportsToday() {
     fetchReports();
 }
 
+function extractTaskNumber(str) {
+    if (!str) return '';
+    str = str.trim();
+    if (str.match(/^[PT]?\d+$/i)) return str;
+    if (str.match(/^#\d+$/)) return str;
+    
+    const kMatch = str.match(/[?&]k=(\d+)/i);
+    if (kMatch) return kMatch[1];
+    
+    const pathMatch = str.match(/(?:Task|Detail)\/(\d+)/i);
+    if (pathMatch) return pathMatch[1];
+    
+    const hashMatch = str.match(/#(\d+)/);
+    if (hashMatch) return '#' + hashMatch[1];
+
+    const tMatch = str.match(/T(\d+)/i);
+    if (tMatch) return tMatch[0];
+    
+    return '';
+}
+
 function parseReportNotesToForm(text, rawTicket) {
     if (!text) return;
 
@@ -1317,7 +1340,7 @@ function parseReportNotesToForm(text, rawTicket) {
         return match ? match[1].trim() : '';
     };
 
-    const tester = extractField(/測試人員\s*[：:]\s*([^\n]+)/);
+    const tester = extractField(/測試人員[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     const role = localStorage.getItem('qa_role') || 'user';
     const displayName = localStorage.getItem('qa_display_name');
     if (tester && role === 'admin') {
@@ -1326,35 +1349,45 @@ function parseReportNotesToForm(text, rawTicket) {
         document.getElementById('form-tester').value = displayName;
     }
 
-    const dev = extractField(/工程人員\s*[：:]\s*([^\n]+)/);
+    const dev = extractField(/工程人員[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (dev) document.getElementById('form-developer').value = dev;
 
-    const parent = extractField(/母單\s*[：:]\s*([^\n]+)/);
-    if (parent) document.getElementById('form-parent-ticket').value = parent;
+    const parentVal = extractField(/(?:測試母單|母單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+    const cleanParent = extractTaskNumber(parentVal);
+    if (cleanParent) document.getElementById('form-parent-ticket').value = cleanParent;
 
-    const sub = extractField(/子單\s*[：:]\s*([^\n]+)/);
-    if (sub) document.getElementById('form-sub-ticket').value = sub;
+    const subVal = extractField(/(?:測試子單|子單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+    const cleanSub = extractTaskNumber(subVal);
+    if (cleanSub) document.getElementById('form-sub-ticket').value = cleanSub;
 
-    const device = extractField(/測試裝置\s*[：:]\s*([^\n]+)/);
+    const device = extractField(/(?:測試裝置|裝置|設備)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (device) document.getElementById('form-device').value = device;
 
-    const testCase = extractField(/測試案例\s*[：:]\s*([^\n]+)/);
+    const testCase = extractField(/(?:卡片|測試案例|網址|連結|Ticket|URL)[^\S\r\n]*[：:][^\S\r\n]*(https?:\/\/[^\s]+)/i);
     if (testCase) document.getElementById('form-test-case').value = testCase;
 
-    const risk = extractField(/風險評估\s*[：:]\s*([^\n]+)/);
+    const risk = extractField(/風險評估[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (risk) document.getElementById('form-risk').value = risk;
 
-    const passRate = extractField(/通過率(?:\(%\))?\s*[：:]\s*([^\n]+)/);
+    const passRate = extractField(/通過率(?:\(%\))?[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (passRate) document.getElementById('form-pass-rate').value = passRate;
 
-    const testStepsMatch = text.match(/測試步驟\s*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註\s*[：:]|\n處理狀態|$)/);
+    const dateVal = extractField(/(?:測試日期|日期)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+    if (dateVal) {
+        const dateStr = dateVal.replace(/\//g, '-');
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            document.getElementById('form-date').value = dateStr;
+        }
+    }
+
+    const testStepsMatch = text.match(/測試步驟[^\S\r\n]*[：:]\n?([\s\S]*?)(?=\n工單說明|\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註[^\S\r\n]*[：:]|\n處理狀態|$)/i);
     if (testStepsMatch) document.getElementById('form-test-steps').value = testStepsMatch[1].trim();
 
-    const stepsMatch = text.match(/工單說明\s*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註\s*[：:]|\n處理狀態|$)/);
+    const stepsMatch = text.match(/工單說明[^\S\r\n]*[：:]\n?([\s\S]*?)(?=\n風險評估|\n通過率|\n(?:測試員備註|QA備註)|\n備註[^\S\r\n]*[：:]|\n處理狀態|$)/i);
     if (stepsMatch) document.getElementById('form-steps').value = stepsMatch[1].trim();
 
     // 工單備註（舊格式「備註：」在處理狀態前）→ 左側備註欄，非測試員備註
-    const ticketRemarkMatch = text.match(/\n備註\s*[：:]\s*([^\n]+)(?=\n處理狀態|$)/);
+    const ticketRemarkMatch = text.match(/\n備註[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)(?=\n處理狀態|$)/i);
     if (ticketRemarkMatch) {
         const stepsEl = document.getElementById('form-steps');
         if (!stepsEl.value.trim()) {
@@ -1362,13 +1395,13 @@ function parseReportNotesToForm(text, rawTicket) {
         }
     }
 
-    const testerNotes = extractField(/(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+    const testerNotes = extractField(/(?:測試員備註|QA備註)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (testerNotes) document.getElementById('form-notes').value = testerNotes;
 
-    const versionMatch = text.match(/軟體版本\s*[：:]\n?([\s\S]*?)(?=\n測試環境|\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
+    const versionMatch = text.match(/軟體版本[^\S\r\n]*[：:]\n?([\s\S]*?)(?=\n測試環境|\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/i);
     if (versionMatch) document.getElementById('form-version').value = versionMatch[1].trim();
 
-    const envMatch = text.match(/測試環境\s*[：:]\n?([\s\S]*?)(?=\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/);
+    const envMatch = text.match(/測試環境[^\S\r\n]*[：:]\n?([\s\S]*?)(?=\n測試裝置|\n測試案例|\n測試步驟|\n工單說明|\n風險評估|$)/i);
     if (envMatch) document.getElementById('form-env').value = envMatch[1].trim();
 }
 
@@ -1550,6 +1583,7 @@ async function submitReport(e) {
 
     try {
         const endpoint = isEditMode ? `${API_BASE}/api/reports/update` : `${API_BASE}/api/reports`;
+        console.log('[DEBUG] submitReport endpoint:', endpoint, 'payload:', payload);
         const res = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1573,6 +1607,7 @@ async function submitReport(e) {
             raw_ticket: payload.raw_ticket,
             notes: payload.notes,
             is_pinned: existingReport ? (existingReport.is_pinned || 0) : 0,
+            owner_user_id: existingReport ? (existingReport.owner_user_id || null) : (localStorage.getItem('qa_user_id') ? parseInt(localStorage.getItem('qa_user_id'), 10) : null),
         });
 
         if (viewingReportId === savedId) {
@@ -1808,6 +1843,26 @@ function initGeneratorLogic() {
             el.addEventListener('input', (e) => {
                 if (e.isTrusted) {
                     userEditedFields.add(id);
+                    
+                    // 雙向同步更新第一步工單中的對應標籤或備註內容
+                    const val = el.value;
+                    if (id === 'form-steps') {
+                        syncTicketInputRemark(val);
+                    } else if (id === 'form-date') {
+                        syncTicketInputLabel('測試日期|日期', '測試日期', val.replace(/-/g, '/'));
+                    } else if (id === 'form-developer') {
+                        syncTicketInputLabel('工程人員|RD|開發人員', '工程人員', val);
+                    } else if (id === 'form-version') {
+                        syncTicketInputLabel('軟體版本|版號|測試版本|版本', '軟體版本', val);
+                    } else if (id === 'form-env') {
+                        syncTicketInputLabel('測試環境|測試網址', '測試環境', val);
+                    } else if (id === 'form-parent-ticket') {
+                        syncTicketInputLabel('測試母單|母單', '測試母單', val);
+                    } else if (id === 'form-sub-ticket') {
+                        syncTicketInputLabel('測試子單|子單', '測試子單', val);
+                    } else if (id === 'form-test-case') {
+                        syncTicketInputLabel('卡片|測試案例|網址|連結|Ticket|URL', '測試案例', val);
+                    }
                 }
                 if (id === 'form-date') {
                     const isEditMode = document.getElementById('form-report-id').value !== '';
@@ -1852,7 +1907,6 @@ function initGeneratorLogic() {
             updateGeneratedResult();
         });
     }
-
     const ticketInput = document.getElementById('ticket-input');
     if (ticketInput) {
         ticketInput.addEventListener('input', (e) => {
@@ -1860,19 +1914,23 @@ function initGeneratorLogic() {
             if (!text) return;
             let updated = false;
 
-            const versionMatch = text.match(/(?:軟體版本|版號|測試版本|版本)\s*[：:]\s*([^\n]+)/);
+            // 當工單有調整時，自動重置解析欄位的用戶編輯狀態，以便重新解析對齊
+            const parsedFields = ['form-steps', 'form-version', 'form-device', 'form-developer', 'form-env', 'form-parent-ticket', 'form-sub-ticket', 'form-test-case', 'form-date'];
+            parsedFields.forEach(field => userEditedFields.delete(field));
+
+            const versionMatch = text.match(/(?:軟體版本|版號|測試版本|版本)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (versionMatch && !userEditedFields.has('form-version')) {
                 document.getElementById('form-version').value = versionMatch[1].trim();
                 updated = true;
             }
 
-            const deviceMatch = text.match(/(?:測試裝置|裝置|設備)\s*[：:]\s*([^\n]+)/);
+            const deviceMatch = text.match(/(?:測試裝置|裝置|設備)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (deviceMatch && !userEditedFields.has('form-device')) {
                 document.getElementById('form-device').value = deviceMatch[1].trim();
                 updated = true;
             }
             
-            const testerMatch = text.match(/(?:測試人員|QA)\s*[：:]\s*([^\n]+)/);
+            const testerMatch = text.match(/(?:測試人員|QA)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (testerMatch && !userEditedFields.has('form-tester')) {
                 const role = localStorage.getItem('qa_role') || 'user';
                 const displayName = localStorage.getItem('qa_display_name');
@@ -1884,37 +1942,53 @@ function initGeneratorLogic() {
                 updated = true;
             }
 
-            const devMatch = text.match(/(?:工程人員|RD|開發人員)\s*[：:]\s*([^\n]+)/);
+            const devMatch = text.match(/(?:工程人員|RD|開發人員)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (devMatch && !userEditedFields.has('form-developer')) {
                 document.getElementById('form-developer').value = devMatch[1].trim();
                 updated = true;
             }
 
-            const envMatch = text.match(/(?:測試環境|測試網址)\s*[：:]\s*([^\n]+)/);
+            const envMatch = text.match(/(?:測試環境|測試網址)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (envMatch && !userEditedFields.has('form-env')) {
                 document.getElementById('form-env').value = envMatch[1].trim();
                 updated = true;
             }
 
-            const parentMatch = text.match(/母單\s*[：:]\s*([^\n]+)/);
+            const parentMatch = text.match(/(?:測試母單|母單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (parentMatch && !userEditedFields.has('form-parent-ticket')) {
-                document.getElementById('form-parent-ticket').value = parentMatch[1].trim();
-                updated = true;
+                const val = extractTaskNumber(parentMatch[1]);
+                if (val) {
+                    document.getElementById('form-parent-ticket').value = val;
+                    updated = true;
+                }
             }
 
-            const subMatch = text.match(/子單\s*[：:]\s*([^\n]+)/);
+            const subMatch = text.match(/(?:測試子單|子單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (subMatch && !userEditedFields.has('form-sub-ticket')) {
-                document.getElementById('form-sub-ticket').value = subMatch[1].trim();
-                updated = true;
+                const val = extractTaskNumber(subMatch[1]);
+                if (val) {
+                    document.getElementById('form-sub-ticket').value = val;
+                    updated = true;
+                }
             }
 
-            const remarkMatch = text.match(/(?:^|\n)備註\s*[：:]\s*([^\n]+)/);
+            const dateMatch = text.match(/(?:測試日期|日期)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+            if (dateMatch && !userEditedFields.has('form-date')) {
+                const rawDate = dateMatch[1].trim();
+                const dateStr = rawDate.replace(/\//g, '-');
+                if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    document.getElementById('form-date').value = dateStr;
+                    updated = true;
+                }
+            }
+
+            const remarkMatch = text.match(/(?:^|\n)備註[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (remarkMatch && !userEditedFields.has('form-steps')) {
                 document.getElementById('form-steps').value = remarkMatch[1].trim();
                 updated = true;
             }
 
-            const testerRemarkMatch = text.match(/(?:^|\n)(?:測試員備註|QA備註)\s*[：:]\s*([^\n]+)/);
+            const testerRemarkMatch = text.match(/(?:^|\n)(?:測試員備註|QA備註)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
             if (testerRemarkMatch && !userEditedFields.has('form-notes')) {
                 document.getElementById('form-notes').value = testerRemarkMatch[1].trim();
                 updated = true;
@@ -1927,8 +2001,8 @@ function initGeneratorLogic() {
             for (const line of lines) {
                 if (!line) continue;
 
-                // 若該行是已知欄位標籤，跳過它
-                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|卡片|測試案例|網址|連結|Ticket|URL|備註|測試員備註|QA備註)\s*[：:]/i)) {
+                // 若該行是已知欄位標籤，跳過它，新增過濾測試日期、測試母單、測試子單、處理狀態等標籤
+                if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|測試母單|測試子單|測試日期|日期|處理狀態|卡片|測試案例|網址|連結|Ticket|URL|備註|測試員備註|QA備註)[^\S\r\n]*[：:]/i)) {
                     continue;
                 }
 
@@ -1963,8 +2037,8 @@ function initGeneratorLogic() {
                 updated = true;
             }
 
-            // 抓取網址當作測試案例
-            const urlMatch = text.match(/(?:卡片|測試案例|網址|連結|Ticket|URL)\s*[：:]\s*(https?:\/\/[^\s]+)/i) || text.match(/(https?:\/\/[^\s]+)/i);
+            // 限制測試案例必須有明確標籤，禁止亂吃預設網址
+            const urlMatch = text.match(/(?:卡片|測試案例|網址|連結|Ticket|URL)[^\S\r\n]*[：:][^\S\r\n]*(https?:\/\/[^\s]+)/i);
             if (urlMatch && !userEditedFields.has('form-test-case')) {
                 document.getElementById('form-test-case').value = urlMatch[1].trim();
                 updated = true;
@@ -1975,6 +2049,9 @@ function initGeneratorLogic() {
             if (updated) updateGeneratedResult();
         });
     }
+    
+    // 初始化右側雙模富文本預覽
+    if (typeof initRichPreview === 'function') initRichPreview();
 }
 
 function parseGrafanaVersion() {
@@ -2074,8 +2151,19 @@ function syncPreviewTailFields() {
 
 function upsertPreviewBlock(text, label, value, insertBeforeLabel) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const knownLabels = '案件編號|專案名稱|測試日期|測試人員|工程人員|母單|子單|軟體版本|測試環境|測試裝置|測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態|工單說明|測試員備註|QA備註';
-    const blockRe = new RegExp(`(^|\\n)(${escaped}\\s*[：:])(?:\\n|.)*?(?=\\n(?:${knownLabels})\\s*[：:]|$)`, 'i');
+    
+    // 定義每個欄位在預覽框中，只允許其「後方」的欄位作為結束邊界，防止被 Block 內部的偽標籤切斷
+    const followingLabelsMap = {
+        '軟體版本': '測試環境|測試裝置|測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態',
+        '測試環境': '測試裝置|測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態',
+        '測試裝置': '測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態',
+        '測試案例': '測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態',
+        '測試步驟': '風險評估|通過率(?:\\(%\\))?|備註|處理狀態',
+        '備註': '處理狀態'
+    };
+    
+    const followingLabels = followingLabelsMap[label] || '案件編號|專案名稱|測試日期|測試人員|工程人員|母單|子單|軟體版本|測試環境|測試裝置|測試案例|測試步驟|風險評估|通過率(?:\\(%\\))?|備註|處理狀態|工單說明|測試員備註|QA備註';
+    const blockRe = new RegExp(`(^|\\n)(${escaped}\\s*[：:])(?:\\n|.)*?(?=\\n(?:${followingLabels})\\s*[：:]|$)`, 'i');
 
     if (value) {
         const hasNewline = value.includes('\n') || label === '測試步驟';
@@ -2140,11 +2228,360 @@ function syncPreviewMiddleFields() {
     el.value = text;
 }
 
+function syncTicketInputRemark(newRemark) {
+    const ticketInput = document.getElementById('ticket-input');
+    if (!ticketInput) return;
+    const text = ticketInput.value;
+    if (!text.trim()) return;
+
+    const lines = text.split('\n');
+    let firstRemarkIndex = -1;
+    let newLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // 判斷這行是否為已知欄位標籤
+        const isLabel = trimmed.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|測試母單|測試子單|測試日期|日期|處理狀態|卡片|測試案例|網址|連結|Ticket|URL|備註|測試員備註|QA備註)[^\S\r\n]*[：:]/i);
+        
+        // 判斷是否為標題
+        const isTitle = (trimmed.includes('【') && trimmed.includes('】')) || (trimmed.includes('[') && trimmed.includes(']'));
+        
+        // 判斷是否為母子單號
+        const isTaskNo = trimmed.match(/^T\d+$/i) || trimmed.match(/^#\d+$/);
+
+        // 如果是備註行 (非空、非標籤、非標題、非任務單號)
+        if (trimmed && !isLabel && !isTitle && !isTaskNo) {
+            if (firstRemarkIndex === -1) {
+                firstRemarkIndex = newLines.length; // 記錄第一個備註行插入點
+            }
+            // 跳過備註行，不保留舊的
+        } else {
+            newLines.push(line);
+        }
+    }
+
+    if (firstRemarkIndex === -1) {
+        firstRemarkIndex = newLines.length;
+    }
+
+    if (newRemark.trim()) {
+        newLines.splice(firstRemarkIndex, 0, newRemark);
+    }
+
+    ticketInput.value = newLines.join('\n');
+}
+
+function syncTicketInputLabel(labelPattern, labelName, newValue) {
+    const ticketInput = document.getElementById('ticket-input');
+    if (!ticketInput) return;
+    const text = ticketInput.value;
+    if (!text.trim()) return;
+
+    const lines = text.split('\n');
+    let updated = false;
+
+    // 建立正則表達式匹配該標籤行
+    const regex = new RegExp(`^(${labelPattern})[^\\S\\r\\n]*[：:][^\\S\\r\\n]*(.*)`, 'i');
+
+    for (let i = 0; i < lines.length; i++) {
+        const match = lines[i].match(regex);
+        if (match) {
+            if (newValue !== undefined && newValue !== null && newValue !== '') {
+                // 如果有新值，替換整行，保留原本使用的標籤字樣
+                lines[i] = `${match[1]}：${newValue}`;
+            } else {
+                // 如果新值為空，我們可以把這一行清空或移除
+                lines.splice(i, 1);
+                i--;
+            }
+            updated = true;
+            break;
+        }
+    }
+
+    if (updated) {
+        ticketInput.value = lines.join('\n');
+    }
+}
+
+function updateFieldsHighlight() {
+    const fields = [
+        'form-case-no', 'form-project', 'form-tester', 'form-developer', 'form-date', 
+        'form-parent-ticket', 'form-sub-ticket', 'form-version', 'form-env', 
+        'form-device', 'form-test-case', 'form-test-steps', 'form-steps', 
+        'form-risk', 'form-pass-rate', 'form-status', 'form-notes'
+    ];
+    
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        
+        // 確保加上漸變效果以提供 premium 體驗
+        el.classList.add('transition-all', 'duration-200');
+        
+        if (userEditedFields.has(id)) {
+            // 被手動修改過的欄位 (變動後)：高亮為淡橘色背景與橘色外框，且在聚焦打字時也維持橘色
+            el.classList.add('border-amber-500', 'bg-amber-50/20', 'text-amber-900', 'font-medium', 'focus:border-amber-500', 'focus:ring-amber-200');
+            el.classList.remove('border-gray-300', 'focus:border-primary', 'focus:ring-primary');
+            el.style.boxShadow = '0 0 0 3px rgba(245, 158, 11, 0.15)';
+        } else {
+            // 未被手動修改 (變動前)：回復正常灰色外框與白色背景，聚焦時回復為求職藍
+            el.classList.remove('border-amber-500', 'bg-amber-50/20', 'text-amber-900', 'font-medium', 'focus:border-amber-500', 'focus:ring-amber-200');
+            el.classList.add('border-gray-300', 'focus:border-primary', 'focus:ring-primary');
+            el.style.boxShadow = '';
+        }
+    });
+}
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function renderRichPreview() {
+    const rawText = document.getElementById('generated-result')?.value || '';
+    const previewDiv = document.getElementById('generated-result-preview');
+    if (!previewDiv) return;
+    
+    if (!rawText) {
+        previewDiv.innerHTML = '';
+        return;
+    }
+
+    const labelToFieldMap = {
+        '案件編號': ['form-case-no'],
+        '專案名稱': ['form-project'],
+        '測試日期': ['form-date'],
+        '測試人員': ['form-tester'],
+        '工程人員': ['form-developer'],
+        '母單': ['form-parent-ticket'],
+        '子單': ['form-sub-ticket'],
+        '軟體版本': ['form-version'],
+        '測試環境': ['form-env'],
+        '測試裝置': ['form-device', 'chk-ipad', 'chk-iphone', 'form-ipad-version', 'form-iphone-version'],
+        '測試案例': ['form-test-case'],
+        '測試步驟': ['form-test-steps'],
+        '風險評估': ['form-risk'],
+        '通過率(?:\\(%\\))?': ['form-pass-rate'],
+        '備註': ['form-steps'],
+        '處理狀態': ['form-status']
+    };
+
+    const lines = rawText.split('\n');
+    let currentFieldIsEdited = false;
+    let htmlLines = [];
+
+    const labelRegex = /^([^：:]+)[：:]/;
+
+    for (let line of lines) {
+        const match = line.match(labelRegex);
+        if (match) {
+            const label = match[1].trim();
+            let matchedKey = null;
+            for (const key of Object.keys(labelToFieldMap)) {
+                if (new RegExp('^' + key + '$').test(label)) {
+                    matchedKey = key;
+                    break;
+                }
+            }
+
+            if (matchedKey) {
+                const fields = labelToFieldMap[matchedKey];
+                currentFieldIsEdited = fields.some(f => userEditedFields.has(f));
+            }
+        }
+
+        if (currentFieldIsEdited) {
+            // 被手動修改過的行 (變動後)：套用琥珀橘高亮背景、橘色字與左側橘色粗邊線
+            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${escapeHtml(line)}</div>`);
+        } else {
+            // 未被修改的行 (變動前)：普通黑色字
+            htmlLines.push(`<div class="px-2 py-0.5">${escapeHtml(line)}</div>`);
+        }
+    }
+
+    previewDiv.innerHTML = htmlLines.join('');
+}
+
+function initRichPreview() {
+    const textarea = document.getElementById('generated-result');
+    const preview = document.getElementById('generated-result-preview');
+    if (!textarea || !preview) return;
+
+    // 預設將 textarea 隱藏，顯示 preview
+    textarea.style.display = 'none';
+    preview.style.display = 'block';
+
+    // 當使用者點擊 preview 時，切換回 textarea 進行編輯
+    preview.addEventListener('click', () => {
+        preview.style.display = 'none';
+        textarea.style.display = 'block';
+        textarea.focus();
+    });
+
+    // 當 textarea 失去焦點時，更新並切換回 preview
+    textarea.addEventListener('blur', () => {
+        renderRichPreview();
+        textarea.style.display = 'none';
+        preview.style.display = 'block';
+    });
+}
+
+function renderViewReportRichPreview(report) {
+    const textarea = document.getElementById('view-generated-notes');
+    const preview = document.getElementById('view-generated-notes-preview');
+    if (!textarea || !preview) return;
+
+    // 預設將 textarea 隱藏，顯示 preview
+    textarea.style.display = 'none';
+    preview.style.display = 'block';
+
+    const rawText = getNotesWithoutTesterRemark(report.notes) || '';
+    if (!rawText || rawText === '無測試紀錄內容') {
+        preview.innerHTML = `<div class="px-2 py-0.5 text-gray-400">無測試紀錄內容</div>`;
+        return;
+    }
+
+    // 1. 動態計算此報告中被修改過的欄位 (viewEditedFields)
+    const viewEditedFields = new Set();
+    const raw = report.raw_ticket || '';
+    
+    if (raw.trim()) {
+        const parsed = {};
+        
+        const versionMatch = raw.match(/(?:軟體版本|版號|測試版本|版本)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (versionMatch) parsed['form-version'] = versionMatch[1].trim();
+
+        const deviceMatch = raw.match(/(?:測試裝置|裝置|設備)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (deviceMatch) parsed['form-device'] = deviceMatch[1].trim();
+
+        const testerMatch = raw.match(/(?:測試人員|QA)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (testerMatch) parsed['form-tester'] = testerMatch[1].trim();
+
+        const devMatch = raw.match(/(?:工程人員|RD|開發人員)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (devMatch) parsed['form-developer'] = devMatch[1].trim();
+
+        const envMatch = raw.match(/(?:測試環境|測試網址)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (envMatch) parsed['form-env'] = envMatch[1].trim();
+
+        const parentMatch = raw.match(/(?:測試母單|母單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (parentMatch) {
+            const val = extractTaskNumber(parentMatch[1]);
+            if (val) parsed['form-parent-ticket'] = val;
+        }
+
+        const subMatch = raw.match(/(?:測試子單|子單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (subMatch) {
+            const val = extractTaskNumber(subMatch[1]);
+            if (val) parsed['form-sub-ticket'] = val;
+        }
+
+        const dateMatch = raw.match(/(?:測試日期|日期)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+        if (dateMatch) {
+            const rawDate = dateMatch[1].trim();
+            const dateStr = rawDate.replace(/\//g, '-');
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                parsed['form-date'] = dateStr;
+            }
+        }
+
+        const lines = raw.split('\n').map(l => l.trim());
+        let otherNotes = [];
+        for (const line of lines) {
+            if (!line) continue;
+            if (line.match(/^(?:軟體版本|版號|測試版本|版本|測試裝置|裝置|設備|測試人員|QA|工程人員|RD|開發人員|測試環境|測試網址|母單|子單|測試母單|測試子單|測試日期|日期|處理狀態|卡片|測試案例|網址|連結|Ticket|URL|備註|測試員備註|QA備註)[^\S\r\n]*[：:]/i)) {
+                continue;
+            }
+            if ((line.includes('【') && line.includes('】')) || (line.includes('[') && line.includes(']'))) {
+                continue;
+            }
+            otherNotes.push(line);
+        }
+        if (otherNotes.length > 0) {
+            parsed['form-steps'] = otherNotes.join('\n');
+        }
+
+        // 比對
+        const reportDate = report.case_date ? report.case_date.replace(/\//g, '-') : '';
+        const parsedDate = parsed['form-date'] ? parsed['form-date'].replace(/\//g, '-') : '';
+        if (reportDate && parsedDate && reportDate !== parsedDate) viewEditedFields.add('form-date');
+
+        if ((report.rd_name || '').trim() !== (parsed['form-developer'] || '').trim()) viewEditedFields.add('form-developer');
+        if (String(report.parent_ticket || '').trim() !== String(parsed['form-parent-ticket'] || '').trim()) viewEditedFields.add('form-parent-ticket');
+        if (String(report.sub_ticket || '').trim() !== String(parsed['form-sub-ticket'] || '').trim()) viewEditedFields.add('form-sub-ticket');
+        if ((report.software_version || '').trim() !== (parsed['form-version'] || '').trim()) viewEditedFields.add('form-version');
+        if ((report.test_env || '').trim() !== (parsed['form-env'] || '').trim()) viewEditedFields.add('form-env');
+        if ((report.test_device || '').trim() !== (parsed['form-device'] || '').trim()) viewEditedFields.add('form-device');
+        if ((report.steps || '').trim() !== (parsed['form-steps'] || '').trim()) viewEditedFields.add('form-steps');
+    }
+
+    // 2. 開始渲染行
+    const labelToFieldMap = {
+        '案件編號': ['form-case-no'],
+        '專案名稱': ['form-project'],
+        '測試日期': ['form-date'],
+        '測試人員': ['form-tester'],
+        '工程人員': ['form-developer'],
+        '母單': ['form-parent-ticket'],
+        '子單': ['form-sub-ticket'],
+        '軟體版本': ['form-version'],
+        '測試環境': ['form-env'],
+        '測試裝置': ['form-device', 'chk-ipad', 'chk-iphone', 'form-ipad-version', 'form-iphone-version'],
+        '測試案例': ['form-test-case'],
+        '測試步驟': ['form-test-steps'],
+        '風險評估': ['form-risk'],
+        '通過率(?:\\(%\\))?': ['form-pass-rate'],
+        '備註': ['form-steps'],
+        '處理狀態': ['form-status']
+    };
+
+    const lines = rawText.split('\n');
+    let currentFieldIsEdited = false;
+    let htmlLines = [];
+
+    const labelRegex = /^([^：:]+)[：:]/;
+
+    for (let line of lines) {
+        const match = line.match(labelRegex);
+        if (match) {
+            const label = match[1].trim();
+            let matchedKey = null;
+            for (const key of Object.keys(labelToFieldMap)) {
+                if (new RegExp('^' + key + '$').test(label)) {
+                    matchedKey = key;
+                    break;
+                }
+            }
+
+            if (matchedKey) {
+                const fields = labelToFieldMap[matchedKey];
+                currentFieldIsEdited = fields.some(f => viewEditedFields.has(f));
+            }
+        }
+
+        if (currentFieldIsEdited) {
+            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${escapeHtml(line)}</div>`);
+        } else {
+            htmlLines.push(`<div class="px-2 py-0.5">${escapeHtml(line)}</div>`);
+        }
+    }
+
+    preview.innerHTML = htmlLines.join('');
+}
+
 function updateGeneratedResult() {
     if (userEditedFields.has('generated-result')) {
         syncPreviewHeaderFields();
         syncPreviewMiddleFields();
         syncPreviewTailFields();
+        updateFieldsHighlight();
+        renderRichPreview();
         return;
     }
 
@@ -2219,13 +2656,30 @@ function updateGeneratedResult() {
 
     const cleanedTemplate = template.replace(/\n\n/g, '\n');
     document.getElementById('generated-result').value = cleanedTemplate;
+
+    updateFieldsHighlight();
+    renderRichPreview();
 }
 
 function copyGeneratedResult() {
     const resultText = document.getElementById('generated-result');
+    const preview = document.getElementById('generated-result-preview');
+    const wasHidden = (resultText.style.display === 'none');
+    
+    if (wasHidden) {
+        resultText.style.display = 'block';
+        if (preview) preview.style.display = 'none';
+    }
+    
     resultText.select();
     document.execCommand('copy');
     window.getSelection().removeAllRanges();
+    
+    if (wasHidden) {
+        resultText.style.display = 'none';
+        if (preview) preview.style.display = 'block';
+    }
+    
     showToast('已複製到剪貼簿！');
 }
 
@@ -2272,12 +2726,24 @@ function setEnv(url) {
     }
     if (typeof parseGrafanaVersion === 'function') parseGrafanaVersion();
     updateEnvButtons();
+
+    // 同步更新第一步工單的測試環境
+    if (typeof syncTicketInputLabel === 'function') {
+        syncTicketInputLabel('測試環境|測試網址', '測試環境', el.value);
+    }
+
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
 function setTestCase(val) {
     userEditedFields.add('form-test-case');
     document.getElementById('form-test-case').value = val;
+
+    // 同步更新第一步工單的測試案例
+    if (typeof syncTicketInputLabel === 'function') {
+        syncTicketInputLabel('卡片|測試案例|網址|連結|Ticket|URL', '測試案例', val);
+    }
+
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
@@ -2289,6 +2755,12 @@ function clearTcPresets() {
 function setTicketNotes(val) {
     userEditedFields.add('form-steps');
     document.getElementById('form-steps').value = val;
+
+    // 同步更新第一步工單的備註內容
+    if (typeof syncTicketInputRemark === 'function') {
+        syncTicketInputRemark(val);
+    }
+
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
@@ -2890,6 +3362,11 @@ function refreshViewReportModal(id) {
 
     document.getElementById('view-generated-notes').value = getNotesWithoutTesterRemark(report.notes) || '無測試紀錄內容';
 
+    // 渲染唯讀的富文本高亮預覽
+    if (typeof renderViewReportRichPreview === 'function') {
+        renderViewReportRichPreview(report);
+    }
+
     const editBtn = document.getElementById('view-edit-report-btn');
     if (editBtn) editBtn.classList.toggle('hidden', !canUserModifyReport(report));
 }
@@ -2920,6 +3397,14 @@ function closeViewReportModal() {
 
 function copyViewReportNotes() {
     const textarea = document.getElementById('view-generated-notes');
+    const preview = document.getElementById('view-generated-notes-preview');
+    const wasHidden = (textarea.style.display === 'none');
+    
+    if (wasHidden) {
+        textarea.style.display = 'block';
+        if (preview) preview.style.display = 'none';
+    }
+    
     textarea.select();
     try {
         document.execCommand('copy');
@@ -2927,6 +3412,11 @@ function copyViewReportNotes() {
         showToast('已複製報告內容！');
     } catch (err) {
         showToast('複製失敗，請手動複製', true);
+    } finally {
+        if (wasHidden) {
+            textarea.style.display = 'none';
+            if (preview) preview.style.display = 'block';
+        }
     }
 }
 

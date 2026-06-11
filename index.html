@@ -861,6 +861,9 @@
                         <textarea id="view-generated-notes"
                             class="w-full flex-1 p-4 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:outline-none resize-none shadow-sm"
                             readonly></textarea>
+                        <div id="view-generated-notes-preview"
+                            class="w-full flex-1 p-4 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm overflow-y-auto cursor-text shadow-sm"
+                            style="white-space: pre-wrap; display: none;"></div>
                     </div>
                 </div>
             </div>
@@ -1263,6 +1266,9 @@
                         </div>
                         <textarea id="generated-result"
                             class="flex-grow w-full border border-gray-200 rounded-lg p-4 bg-white text-gray-800 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary shadow-inner min-h-[300px] leading-relaxed"></textarea>
+                        <div id="generated-result-preview"
+                            class="flex-grow w-full border border-gray-200 rounded-lg p-4 bg-white text-gray-800 font-mono text-sm shadow-inner min-h-[300px] max-h-[500px] overflow-y-auto leading-relaxed cursor-text"
+                            style="white-space: pre-wrap; display: none;"></div>
                     </div>
                 </div>
 
