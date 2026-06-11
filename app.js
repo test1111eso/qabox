@@ -4141,6 +4141,11 @@ function setUaPat(pat) {
 // --- 設定 Modal ---
 function openUaSettingsModal() {
     const pat = getUaPat();
+    const modal = document.getElementById('ua-settings-modal');
+    // 確保 modal 在 body 最外層，避免被父層 display:none 影響
+    if (modal && modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
     const input = document.getElementById('ua-pat-input');
     // 永遠清空，不放哨兵字元，讓使用者直接輸入新金鑰
     input.value = '';
@@ -4205,6 +4210,12 @@ async function openUaPublishModal() {
         return;
     }
 
+    // 確保 modal 在 body 最外層，避免被父層 display:none 影響
+    const pubModal = document.getElementById('ua-publish-modal');
+    if (pubModal && pubModal.parentElement !== document.body) {
+        document.body.appendChild(pubModal);
+    }
+
     uaSelectedTarget = null;
     const confirmBtn = document.getElementById('ua-publish-confirm-btn');
     confirmBtn.disabled = true;
@@ -4217,7 +4228,7 @@ async function openUaPublishModal() {
     document.getElementById('ua-publish-modal').classList.remove('hidden');
 
     try {
-        const res = await fetch(`${API_BASE}/api/ua/work`, {
+        const res = await fetch(`http://localhost:7788/ua/work`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -4348,7 +4359,7 @@ async function confirmUaPublish() {
     confirmBtn.innerHTML = '發布中...';
 
     try {
-        const res = await fetch(`${API_BASE}/api/ua/discuss`, {
+        const res = await fetch(`http://localhost:7788/ua/discuss`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
