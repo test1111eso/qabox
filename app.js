@@ -4142,19 +4142,24 @@ function setUaPat(pat) {
 function openUaSettingsModal() {
     const pat = getUaPat();
     const input = document.getElementById('ua-pat-input');
-    input.value = pat ? '••••••••' : '';
-    input.placeholder = pat ? '已設定（重新輸入以覆蓋）' : '輸入您的 PAT...';
+    // 永遠清空，不放哨兵字元，讓使用者直接輸入新金鑰
+    input.value = '';
+    input.placeholder = pat ? '已設定，輸入新金鑰以覆蓋' : '輸入您的 PAT...';
+    // 記錄是否已有 PAT（用於儲存時判斷「空白=不改」還是「空白=錯誤」）
+    input.dataset.hasPat = pat ? '1' : '0';
 
     const statusEl = document.getElementById('ua-settings-status');
-    statusEl.classList.add('hidden');
-
     if (pat) {
-        statusEl.textContent = '✅ 已設定個人資訊鑰匙';
+        statusEl.textContent = '✅ 已設定個人資訊鑰匙，可直接關閉或輸入新金鑰覆蓋';
         statusEl.className = 'text-xs mb-1 text-green-600';
         statusEl.classList.remove('hidden');
+    } else {
+        statusEl.classList.add('hidden');
     }
 
     document.getElementById('ua-settings-modal').classList.remove('hidden');
+    // 自動 focus，讓使用者可直接打字
+    setTimeout(() => input.focus(), 100);
 }
 
 function closeUaSettingsModal() {
@@ -4164,17 +4169,22 @@ function closeUaSettingsModal() {
 function saveUaSettings() {
     const input = document.getElementById('ua-pat-input');
     const val = input.value.trim();
-    if (!val || val === '••••••••') {
-        showToast('請輸入有效的個人資訊鑰匙', true);
+    const hasPat = input.dataset.hasPat === '1';
+
+    if (!val) {
+        if (hasPat) {
+            // 使用者沒有輸入新值，代表不想改，直接關閉
+            closeUaSettingsModal();
+        } else {
+            showToast('請輸入個人資訊鑰匙', true);
+            input.focus();
+        }
         return;
     }
+
     setUaPat(val);
-    const statusEl = document.getElementById('ua-settings-status');
-    statusEl.textContent = '✅ 已儲存';
-    statusEl.className = 'text-xs mb-1 text-green-600';
-    statusEl.classList.remove('hidden');
     showToast('UA 個人金鑰已儲存！');
-    setTimeout(() => closeUaSettingsModal(), 800);
+    setTimeout(() => closeUaSettingsModal(), 600);
 }
 
 function clearUaPat() {
