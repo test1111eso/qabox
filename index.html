@@ -1577,7 +1577,20 @@
                                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
                             </path>
                         </svg>
-                        <p class="text-sm">目前沒有待辦中或進行中的工單</p>
+                        <p class="text-sm">找不到工單？您可以直接手動輸入</p>
+                    </div>
+                    
+                    <!-- Manual input fallback -->
+                    <div id="ua-publish-manual" class="mt-4 pt-4 border-t border-gray-100 hidden">
+                        <p class="text-sm font-medium text-gray-700 mb-2">手動指定目標工單：</p>
+                        <div class="flex gap-2">
+                            <input type="text" id="ua-manual-id-input" oninput="handleUaManualInput()" placeholder="貼上工單網址或 ID (例如 9869)" 
+                                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500">
+                            <select id="ua-manual-kind-select" onchange="handleUaManualInput()" class="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 bg-white">
+                                <option value="2" selected>發布為子單</option>
+                                <option value="1">發布為母單</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">

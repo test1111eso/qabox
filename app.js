@@ -3213,7 +3213,6 @@ async function fetchUsers() {
                 : 'text-secondary hover:text-green-700 font-semibold';
             
             const currentUser = localStorage.getItem('qa_display_name');
-            // 若為自己，則不顯示關閉按鈕（安全措施）
             const isSelf = user.username === '20200715' || user.display_name === currentUser;
             
             const statusAction = isSelf 
@@ -3432,7 +3431,7 @@ function copyTicketTemplate() {
         document.execCommand('copy');
         showToast('已複製工單範本！');
     } catch (err) {
-        showToast('複製失敗', true);
+        showToast('複製失敗，請手動複製', true);
     } finally {
         document.body.removeChild(tempTextarea);
     }
@@ -4013,6 +4012,45 @@ document.addEventListener('click', function(e) {
 });
 
 
+async function openUaPublishModal() {
+    document.getElementById('ua-publish-loading').classList.remove('hidden');
+    document.getElementById('ua-work-items-list').classList.add('hidden');
+    document.getElementById('ua-publish-empty').classList.add('hidden');
+    document.getElementById('ua-publish-modal').classList.remove('hidden');
+
+    // 自動帶入表單上的母單或子單
+    const subTicketVal = document.getElementById('form-sub-ticket')?.value?.trim();
+    const parentTicketVal = document.getElementById('form-parent-ticket')?.value?.trim();
+    const manualInput = document.getElementById('ua-manual-id-input');
+    const manualKindSelect = document.getElementById('ua-manual-kind-select');
+    
+    if (manualInput && manualKindSelect) {
+        if (subTicketVal) {
+            manualInput.value = subTicketVal;
+            manualKindSelect.value = '2'; // 子單
+            if (typeof handleUaManualInput === 'function') handleUaManualInput();
+        } else if (parentTicketVal) {
+            manualInput.value = parentTicketVal;
+            manualKindSelect.value = '1'; // 母單
+            if (typeof handleUaManualInput === 'function') handleUaManualInput();
+        } else {
+            manualInput.value = '';
+        }
+    }
+
+    try {
+        const res = await fetch(`http://localhost:7788/ua/work`, {
+            headers: { 'Authorization': `Bearer ${getUaPat()}` }
+        });
+        const data = await res.json();
+        renderUaWorkItems(data);
+    } catch (e) {
+        console.error(e);
+        document.getElementById('ua-publish-loading').classList.add('hidden');
+        document.getElementById('ua-publish-empty').classList.remove('hidden');
+    }
+}
+
 function clearWorkspaceDate() {
     wsShowBlockedOnly = false;
     wsBlockedReportsList = null;
@@ -4199,8 +4237,52 @@ function clearUaPat() {
 }
 
 // --- 發布 Modal ---
-// 選中的發布目標：{ guid, kind, title, toDoGuid }
+// 選中的發布目標：{ guid, kind, title, toDoGuid } 或 { id, kind }
 let uaSelectedTarget = null;
+
+function handleUaManualInput() {
+    const input = document.getElementById('ua-manual-id-input');
+    const confirmBtn = document.getElementById('ua-publish-confirm-btn');
+    
+    // 如果使用者有打字，清空清單的選取狀態
+    if (input.value.trim() !== '') {
+        uaSelectedTarget = null;
+        document.querySelectorAll('.ua-work-item').forEach(el => el.classList.remove('ring-2', 'ring-purple-500', 'bg-purple-50'));
+        
+        // 嘗試從網址解析 k=XXX，或是直接取數字
+        let val = input.value.trim();
+        let parsedId = null;
+        let parsedKind = parseInt(document.getElementById('ua-manual-kind-select').value, 10);
+        
+        if (val.includes('k=')) {
+            const match = val.match(/[?&]k=(\d+)/);
+            if (match) parsedId = parseInt(match[1], 10);
+            if (val.includes('/Plan/')) parsedKind = 1;
+            if (val.includes('/Task/')) parsedKind = 2;
+        } else if (/^\d+$/.test(val)) {
+            parsedId = parseInt(val, 10);
+        }
+        
+        if (parsedId) {
+            uaSelectedTarget = {
+                id: parsedId,
+                kind: parsedKind,
+                title: '自訂輸入工單 (' + parsedId + ')'
+            };
+            confirmBtn.disabled = false;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.cursor = 'pointer';
+        } else {
+            confirmBtn.disabled = true;
+            confirmBtn.style.opacity = '0.5';
+            confirmBtn.style.cursor = 'not-allowed';
+        }
+    } else if (!uaSelectedTarget) {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = '0.5';
+        confirmBtn.style.cursor = 'not-allowed';
+    }
+}
 
 async function openUaPublishModal() {
     const pat = getUaPat();
@@ -4227,6 +4309,40 @@ async function openUaPublishModal() {
     document.getElementById('ua-publish-empty').classList.add('hidden');
     document.getElementById('ua-publish-modal').classList.remove('hidden');
 
+    // ====== 自動帶入母單或子單 ======
+    let subTicketVal = '';
+    let parentTicketVal = '';
+    
+    // 優先從目前預覽的報告內容中抓取 (支援從清單直接點開檢視的情況)
+    const reportContent = document.getElementById('view-generated-notes')?.value || '';
+    const subMatch = reportContent.match(/(?:測試子單|子單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+    const parentMatch = reportContent.match(/(?:測試母單|母單)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
+    if (subMatch) subTicketVal = subMatch[1].trim();
+    if (parentMatch) parentTicketVal = parentMatch[1].trim();
+
+    // 如果沒有，再從左側表單抓取 (支援正在新增/編輯的狀況)
+    if (!subTicketVal) subTicketVal = document.getElementById('form-sub-ticket')?.value?.trim();
+    if (!parentTicketVal) parentTicketVal = document.getElementById('form-parent-ticket')?.value?.trim();
+    const manualInput = document.getElementById('ua-manual-id-input');
+    const manualKindSelect = document.getElementById('ua-manual-kind-select');
+    
+    if (manualInput && manualKindSelect) {
+        let matchStr = '';
+        if (subTicketVal) {
+            matchStr = subTicketVal.replace(/[^0-9]/g, '');
+            manualInput.value = matchStr;
+            manualKindSelect.value = '2'; // 子單
+            if (matchStr && typeof handleUaManualInput === 'function') handleUaManualInput();
+        } else if (parentTicketVal) {
+            matchStr = parentTicketVal.replace(/[^0-9]/g, '');
+            manualInput.value = matchStr;
+            manualKindSelect.value = '1'; // 母單
+            if (matchStr && typeof handleUaManualInput === 'function') handleUaManualInput();
+        } else {
+            manualInput.value = '';
+        }
+    }
+
     try {
         const res = await fetch(`http://localhost:7788/ua/work`, {
             method: 'GET',
@@ -4246,13 +4362,16 @@ async function openUaPublishModal() {
         }
 
         const items = (data.payload || []);
+        const manualBlock = document.getElementById('ua-publish-manual');
         if (items.length === 0) {
             document.getElementById('ua-publish-empty').classList.remove('hidden');
+            if (manualBlock) manualBlock.classList.remove('hidden');
             return;
         }
 
         renderUaWorkItems(items);
         document.getElementById('ua-work-items-list').classList.remove('hidden');
+        if (manualBlock) manualBlock.classList.remove('hidden');
     } catch (err) {
         document.getElementById('ua-publish-loading').classList.add('hidden');
         showToast('無法載入待辦工單：' + err.message, true);
@@ -4338,6 +4457,12 @@ function selectUaTarget(item) {
 }
 
 async function confirmUaPublish() {
+    // 處理手動輸入的情境（清空選取，透過 handleUaManualInput 產生）
+    const manualInput = document.getElementById('ua-manual-id-input');
+    if (manualInput && manualInput.value.trim() !== '' && !document.querySelector('.ua-work-item.ring-2')) {
+        handleUaManualInput();
+    }
+    
     if (!uaSelectedTarget) return;
     const pat = getUaPat();
     if (!pat) {
@@ -4359,23 +4484,30 @@ async function confirmUaPublish() {
     confirmBtn.innerHTML = '發布中...';
 
     try {
+        // 依照 payload 是否有 guid 或只有 id 來決定發送格式
+        const payloadObj = {
+            kind: uaSelectedTarget.kind,
+            contents: reportContent
+        };
+        
+        if (uaSelectedTarget.guid) {
+            payloadObj.guid = uaSelectedTarget.guid;
+        } else if (uaSelectedTarget.id) {
+            payloadObj.id = uaSelectedTarget.id;
+        }
+
         const res = await fetch(`http://localhost:7788/ua/discuss`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-UA-Token': pat,
             },
-            body: JSON.stringify({
-                toDoGuid: uaSelectedTarget.toDoGuid,
-                guid: uaSelectedTarget.guid,
-                kind: uaSelectedTarget.kind,
-                content: reportContent,
-            })
+            body: JSON.stringify([payloadObj])
         });
 
         const data = await res.json();
 
-        if (res.ok && (data.statu === 1 || data.status === 1 || data.success)) {
+        if (res.ok && (data.statu === 1 || data.status === 1 || data.success || data.payload === "1")) {
             showToast(`✅ 已成功發布至${uaSelectedTarget.kind === 1 ? '母單' : '子單'}「${uaSelectedTarget.title}」！`);
             closeUaPublishModal();
         } else {
