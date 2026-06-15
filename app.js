@@ -170,26 +170,26 @@ function syncPreviewHeaderFields() {
 
     let text = el.value;
     const caseNo = document.getElementById('form-case-no')?.value.trim() || '';
-    text = upsertPreviewLine(text, '案件編號', caseNo, '專案名稱');
+    if (caseNo || userEditedFields.has('form-case-no')) text = upsertPreviewLine(text, '案件編號', caseNo, '專案名稱');
 
     const project = document.getElementById('form-project')?.value.trim() || '';
-    text = upsertPreviewLine(text, '專案名稱', project, '測試日期');
+    if (project || userEditedFields.has('form-project')) text = upsertPreviewLine(text, '專案名稱', project, '測試日期');
 
     const dateVal = document.getElementById('form-date')?.value;
     const formattedDate = dateVal ? dateVal.replace(/-/g, '/') : '';
-    text = upsertPreviewLine(text, '測試日期', formattedDate, '測試人員');
+    if (formattedDate || userEditedFields.has('form-date')) text = upsertPreviewLine(text, '測試日期', formattedDate, '測試人員');
 
     const tester = document.getElementById('form-tester')?.value.trim() || '';
-    text = upsertPreviewLine(text, '測試人員', tester, '工程人員');
+    if (tester || userEditedFields.has('form-tester')) text = upsertPreviewLine(text, '測試人員', tester, '工程人員');
 
     const dev = document.getElementById('form-developer')?.value.trim() || '';
-    text = upsertPreviewLine(text, '工程人員', dev, '母單');
+    if (dev || userEditedFields.has('form-developer')) text = upsertPreviewLine(text, '工程人員', dev, '母單');
 
     const parentTicket = document.getElementById('form-parent-ticket')?.value.trim() || '';
-    text = upsertPreviewLine(text, '母單', parentTicket, '子單');
+    if (parentTicket || userEditedFields.has('form-parent-ticket')) text = upsertPreviewLine(text, '母單', parentTicket, '子單');
 
     const subTicket = document.getElementById('form-sub-ticket')?.value.trim() || '';
-    text = upsertPreviewLine(text, '子單', subTicket, '軟體版本');
+    if (subTicket || userEditedFields.has('form-sub-ticket')) text = upsertPreviewLine(text, '子單', subTicket, '軟體版本');
 
     el.value = getNotesWithoutTesterRemark(text);
 }
@@ -1879,7 +1879,24 @@ function initGeneratorLogic() {
     const generatedResult = document.getElementById('generated-result');
     if (generatedResult) {
         generatedResult.addEventListener('input', (e) => {
-            if (e.isTrusted) userEditedFields.add('generated-result');
+            if (e.isTrusted) {
+                userEditedFields.add('generated-result');
+                
+                // 當使用者手動修改右側預覽框時，即時解析其中的「備註：」內容並同步回左側的「form-steps」和「ticket-input」的工單說明
+                const val = generatedResult.value;
+                const remarkMatch = val.match(/(?:^|\n)備註\s*[：:]\s*\n?([\s\S]*?)(?=\n(?:處理狀態)\s*[：:]|$)/i);
+                if (remarkMatch) {
+                    const remarkVal = remarkMatch[1].trim();
+                    const stepsEl = document.getElementById('form-steps');
+                    if (stepsEl && stepsEl.value.trim() !== remarkVal) {
+                        stepsEl.value = remarkVal;
+                        userEditedFields.add('form-steps');
+                        if (typeof syncTicketInputRemark === 'function') {
+                            syncTicketInputRemark(remarkVal);
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -2131,20 +2148,20 @@ function syncPreviewTailFields() {
 
     let text = el.value;
     const stepsVal = document.getElementById('form-steps')?.value.trim() || '';
-    text = upsertPreviewBlock(text, '備註', stepsVal, '處理狀態');
+    if (stepsVal || userEditedFields.has('form-steps')) text = upsertPreviewBlock(text, '備註', stepsVal, '處理狀態');
 
     const riskVal = document.getElementById('form-risk')?.value || '';
-    text = upsertPreviewLine(text, '風險評估', riskVal, '通過率(%)');
+    if (riskVal || userEditedFields.has('form-risk')) text = upsertPreviewLine(text, '風險評估', riskVal, '通過率(%)');
 
     const passRateVal = document.getElementById('form-pass-rate')?.value || '';
-    text = upsertPreviewLine(text, '通過率(%)', passRateVal, '備註');
+    if (passRateVal || userEditedFields.has('form-pass-rate')) text = upsertPreviewLine(text, '通過率(%)', passRateVal, '備註');
 
     const statusVal = document.getElementById('form-status')?.value || '';
     let statusText = statusVal;
     if (statusVal === 'Pass') statusText = '驗證通過';
     if (statusVal === 'Fail') statusText = '驗證失敗';
     if (statusVal === 'BLOCKED') statusText = '阻礙中';
-    text = upsertPreviewLine(text, '處理狀態', statusText);
+    if (statusVal || userEditedFields.has('form-status')) text = upsertPreviewLine(text, '處理狀態', statusText);
 
     el.value = text;
 }
@@ -2199,10 +2216,10 @@ function syncPreviewMiddleFields() {
     let text = el.value;
 
     const versionVal = document.getElementById('form-version')?.value.trim() || '';
-    text = upsertPreviewBlock(text, '軟體版本', versionVal, '測試環境');
+    if (versionVal || userEditedFields.has('form-version')) text = upsertPreviewBlock(text, '軟體版本', versionVal, '測試環境');
 
     const envVal = document.getElementById('form-env')?.value.trim() || '';
-    text = upsertPreviewBlock(text, '測試環境', envVal, '測試裝置');
+    if (envVal || userEditedFields.has('form-env')) text = upsertPreviewBlock(text, '測試環境', envVal, '測試裝置');
 
     const deviceVal = document.getElementById('form-device') ? document.getElementById('form-device').value.trim() : '';
     const isIpad = document.getElementById('chk-ipad') ? document.getElementById('chk-ipad').checked : false;
@@ -2217,13 +2234,14 @@ function syncPreviewMiddleFields() {
     if (isIphone) devices.push(`iPhone ${iphoneVersion}`.trim());
     if (isOther) devices.push(`${otherVersion}`.trim());
     const finalDeviceStr = devices.join(' / ');
-    text = upsertPreviewBlock(text, '測試裝置', finalDeviceStr, '測試案例');
+    const isDeviceEdited = userEditedFields.has('form-device') || userEditedFields.has('chk-ipad') || userEditedFields.has('form-ipad-version') || userEditedFields.has('chk-iphone') || userEditedFields.has('form-iphone-version') || userEditedFields.has('chk-other-device') || userEditedFields.has('form-other-device');
+    if (finalDeviceStr || isDeviceEdited) text = upsertPreviewBlock(text, '測試裝置', finalDeviceStr, '測試案例');
 
     const testCaseVal = document.getElementById('form-test-case')?.value.trim() || '';
-    text = upsertPreviewBlock(text, '測試案例', testCaseVal, '測試步驟');
+    if (testCaseVal || userEditedFields.has('form-test-case')) text = upsertPreviewBlock(text, '測試案例', testCaseVal, '測試步驟');
 
     const testStepsVal = document.getElementById('form-test-steps')?.value.trim() || '';
-    text = upsertPreviewBlock(text, '測試步驟', testStepsVal, '風險評估');
+    if (testStepsVal || userEditedFields.has('form-test-steps')) text = upsertPreviewBlock(text, '測試步驟', testStepsVal, '風險評估');
 
     el.value = text;
 }
