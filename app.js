@@ -1662,14 +1662,27 @@ function updateCollabBellStatus(bulletins) {
     const bellEl = document.getElementById('collab-bell');
     if (!bellEl) return;
     const list = bulletins || currentBulletinsList || [];
-    let readIds = [];
+    let readMap = {};
     try {
         const stored = localStorage.getItem('qa_read_bulletins');
-        if (stored) readIds = JSON.parse(stored).map(String);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                parsed.forEach(oldId => {
+                    readMap[String(oldId)] = '';
+                });
+            } else {
+                readMap = parsed;
+            }
+        }
     } catch (e) {
         console.error(e);
     }
-    const hasUnread = list.some(item => !readIds.includes(String(item.id)));
+    const hasUnread = list.some(item => {
+        const idStr = String(item.id);
+        const contentKey = (item.title || '') + '|' + (item.content || '');
+        return !(idStr in readMap) || readMap[idStr] !== contentKey;
+    });
     if (hasUnread) {
         bellEl.classList.remove('hidden');
     } else {
@@ -1681,18 +1694,30 @@ function markBulletinAsRead(event, id) {
     if (event) {
         event.stopPropagation();
     }
-    let readIds = [];
+    const bulletin = currentBulletinsList.find(b => String(b.id) === String(id));
+    if (!bulletin) return;
+
+    let readMap = {};
     try {
         const stored = localStorage.getItem('qa_read_bulletins');
-        if (stored) readIds = JSON.parse(stored).map(String);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                parsed.forEach(oldId => {
+                    readMap[String(oldId)] = '';
+                });
+            } else {
+                readMap = parsed;
+            }
+        }
     } catch (e) {
         console.error(e);
     }
     const idStr = String(id);
-    if (!readIds.includes(idStr)) {
-        readIds.push(idStr);
-        localStorage.setItem('qa_read_bulletins', JSON.stringify(readIds));
-    }
+    const contentKey = (bulletin.title || '') + '|' + (bulletin.content || '');
+    readMap[idStr] = contentKey;
+    localStorage.setItem('qa_read_bulletins', JSON.stringify(readMap));
+
     const cardEl = document.getElementById(`bulletin-card-${id}`);
     if (cardEl) {
         cardEl.className = 'bg-white p-3 rounded shadow-sm border border-gray-100 relative group flex gap-3 items-start transition';
@@ -1731,10 +1756,19 @@ function renderBulletinList(data) {
     const currentUser = localStorage.getItem('qa_display_name');
     const currentUserRole = localStorage.getItem('qa_role') || 'user';
 
-    let readIds = [];
+    let readMap = {};
     try {
         const stored = localStorage.getItem('qa_read_bulletins');
-        if (stored) readIds = JSON.parse(stored).map(String);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+                parsed.forEach(oldId => {
+                    readMap[String(oldId)] = '';
+                });
+            } else {
+                readMap = parsed;
+            }
+        }
     } catch (e) {
         console.error(e);
     }
@@ -1743,7 +1777,10 @@ function renderBulletinList(data) {
         const div = document.createElement('div');
         div.id = `bulletin-card-${item.id}`;
         
-        const isUnread = !readIds.includes(String(item.id));
+        const idStr = String(item.id);
+        const contentKey = (item.title || '') + '|' + (item.content || '');
+        const isUnread = !(idStr in readMap) || readMap[idStr] !== contentKey;
+
         if (isUnread) {
             div.className = 'bg-white p-3 rounded shadow-sm border-2 border-yellow-400 bg-yellow-50/20 relative group flex gap-3 items-start transition cursor-pointer';
             div.setAttribute('onclick', `markBulletinAsRead(event, '${item.id}')`);
