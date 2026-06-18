@@ -68,8 +68,8 @@
                             class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
                             id="nav-reports">測試報告</button>
                         <button onclick="switchView('documents')"
-                            class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition"
-                            id="nav-documents">協作中心</button>
+                            class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition flex items-center gap-1"
+                            id="nav-documents"><span id="collab-bell" class="hidden text-yellow-400 animate-bounce">🔔</span>協作中心</button>
                         <button onclick="switchView('users')"
                             class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition hidden"
                             id="nav-users">測試員管理</button>
@@ -1666,7 +1666,7 @@
     </div>
 
         <!-- Scripts -->
-        <script src="app.js?v=20260618_3"></script>
+        <script src="app.js?v=20260618_4"></script>
 </body>
 
 </html>

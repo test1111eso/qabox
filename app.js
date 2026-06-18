@@ -1653,6 +1653,51 @@ function loadCollaborationBoard() {
     renderCollabList('todo');
 }
 
+function updateCollabBellStatus(bulletins) {
+    const bellEl = document.getElementById('collab-bell');
+    if (!bellEl) return;
+    const list = bulletins || currentBulletinsList || [];
+    let readIds = [];
+    try {
+        const stored = localStorage.getItem('qa_read_bulletins');
+        if (stored) readIds = JSON.parse(stored).map(String);
+    } catch (e) {
+        console.error(e);
+    }
+    const hasUnread = list.some(item => !readIds.includes(String(item.id)));
+    if (hasUnread) {
+        bellEl.classList.remove('hidden');
+    } else {
+        bellEl.classList.add('hidden');
+    }
+}
+
+function markBulletinAsRead(event, id) {
+    if (event) {
+        event.stopPropagation();
+    }
+    let readIds = [];
+    try {
+        const stored = localStorage.getItem('qa_read_bulletins');
+        if (stored) readIds = JSON.parse(stored).map(String);
+    } catch (e) {
+        console.error(e);
+    }
+    const idStr = String(id);
+    if (!readIds.includes(idStr)) {
+        readIds.push(idStr);
+        localStorage.setItem('qa_read_bulletins', JSON.stringify(readIds));
+    }
+    const cardEl = document.getElementById(`bulletin-card-${id}`);
+    if (cardEl) {
+        cardEl.className = 'bg-white p-3 rounded shadow-sm border border-gray-100 relative group flex gap-3 items-start transition';
+        cardEl.removeAttribute('onclick');
+        cardEl.removeAttribute('title');
+        cardEl.classList.remove('cursor-pointer');
+    }
+    updateCollabBellStatus();
+}
+
 async function fetchBulletins() {
     try {
         const res = await fetch(`${API_BASE}/api/collab/bulletins`);
@@ -1674,15 +1719,33 @@ function renderBulletinList(data) {
 
     if (!data || data.length === 0) {
         listEl.innerHTML = '<div class="text-center text-sm text-gray-400 py-4">目前沒有項目</div>';
+        updateCollabBellStatus(data);
         return;
     }
 
     const currentUser = localStorage.getItem('qa_display_name');
     const currentUserRole = localStorage.getItem('qa_role') || 'user';
 
+    let readIds = [];
+    try {
+        const stored = localStorage.getItem('qa_read_bulletins');
+        if (stored) readIds = JSON.parse(stored).map(String);
+    } catch (e) {
+        console.error(e);
+    }
+
     data.forEach(item => {
         const div = document.createElement('div');
-        div.className = 'bg-white p-3 rounded shadow-sm border border-gray-100 relative group flex gap-3 items-start transition';
+        div.id = `bulletin-card-${item.id}`;
+        
+        const isUnread = !readIds.includes(String(item.id));
+        if (isUnread) {
+            div.className = 'bg-white p-3 rounded shadow-sm border-2 border-yellow-400 bg-yellow-50/20 relative group flex gap-3 items-start transition cursor-pointer';
+            div.setAttribute('onclick', `markBulletinAsRead(event, '${item.id}')`);
+            div.setAttribute('title', '點擊標記為已讀');
+        } else {
+            div.className = 'bg-white p-3 rounded shadow-sm border border-gray-100 relative group flex gap-3 items-start transition';
+        }
         
         const timestampStr = new Date(item.created_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         
@@ -1701,10 +1764,10 @@ function renderBulletinList(data) {
         const canModify = currentUserRole === 'admin' || item.author === currentUser;
         const actionHtml = canModify ? `
             <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition flex-shrink-0 self-start mt-0.5">
-                <button onclick="openCollabBulletinEditModal('${item.id}')" class="text-gray-300 hover:text-blue-500 transition" title="修改公告">
+                <button onclick="event.stopPropagation(); openCollabBulletinEditModal('${item.id}')" class="text-gray-300 hover:text-blue-500 transition" title="修改公告">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                 </button>
-                <button onclick="deleteCollabItem('bulletin', '${item.id}')" class="text-gray-300 hover:text-red-500 transition" title="刪除公告">
+                <button onclick="event.stopPropagation(); deleteCollabItem('bulletin', '${item.id}')" class="text-gray-300 hover:text-red-500 transition" title="刪除公告">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
             </div>
@@ -1713,6 +1776,8 @@ function renderBulletinList(data) {
         div.innerHTML = `${contentHtml}${actionHtml}`;
         listEl.appendChild(div);
     });
+
+    updateCollabBellStatus(data);
 }
 
 function getCollabData(type) {
