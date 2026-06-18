@@ -279,6 +279,7 @@ function checkAuth() {
         switchView('workspace');
         initGeneratorLogic();
         fetchDutyPerson();
+        fetchBulletins();
     } else {
         document.getElementById('auth-view').classList.remove('hidden');
         document.getElementById('main-app').classList.add('hidden');
@@ -489,7 +490,11 @@ async function forceClearCache(silent = false, clearStorage = false) {
     }
     
     if (clearStorage) {
-        localStorage.clear();
+        localStorage.removeItem('qa_session_token');
+        localStorage.removeItem('qa_display_name');
+        localStorage.removeItem('qa_user_id');
+        localStorage.removeItem('qa_username');
+        localStorage.removeItem('qa_role');
     }
     sessionStorage.clear();
     
