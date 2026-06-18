@@ -5,6 +5,7 @@ let dailyChartInstance = null;
 let statusChartInstance = null;
 let testerChartInstance = null;
 let currentReportsList = [];
+let currentBulletinsList = [];
 let wsCurrentYear = new Date().getFullYear();
 let wsCurrentMonth = new Date().getMonth() + 1;
 let currentReportMode = 'normal';
@@ -253,11 +254,11 @@ function checkAuth() {
             }
         }
         
-        // 預設日期區間為月初到今天
+        // 預設日期區間為今天
         const twToday = getTaiwanToday();
         const twFirstDay = getTaiwanFirstDay();
         
-        document.getElementById('filter-start-date').value = twFirstDay;
+        document.getElementById('filter-start-date').value = twToday;
         document.getElementById('filter-end-date').value = twToday;
         
         const testerStart = document.getElementById('tester-start-date');
@@ -265,6 +266,13 @@ function checkAuth() {
         if (testerStart && testerEnd) {
             testerStart.value = twFirstDay;
             testerEnd.value = twToday;
+        }
+        
+        const wsStart = document.getElementById('ws-filter-date-start');
+        const wsEnd = document.getElementById('ws-filter-date-end');
+        if (wsStart && wsEnd) {
+            wsStart.value = twToday;
+            wsEnd.value = twToday;
         }
         
         initFilterTesters();
@@ -595,11 +603,12 @@ async function loadWorkspace() {
         renderWorkspaceCalendar(data, wsCurrentYear, wsCurrentMonth);
         refreshWorkspaceBlockedCount();
         if (wsShowBlockedOnly) {
-            try {
-                wsBlockedReportsList = await fetchWorkspaceBlockedReports();
-            } catch (err) {
-                console.error(err);
+            let list = filterIssueReports(currentReportsList || []);
+            const currentUserRole = localStorage.getItem('qa_role') || 'user';
+            if (currentUserRole !== 'admin') {
+                list = list.filter(isReportOwnedByCurrentUser);
             }
+            wsBlockedReportsList = list;
         }
         filterWorkspaceReports();
     } catch (err) {
@@ -735,6 +744,7 @@ function openModal(mode = 'normal') {
     const defaultCategory = document.querySelector('input[name="report_category"][value="其他"]');
     if (defaultCategory) defaultCategory.checked = true;
 
+    resetRichPreviewState();
     updateGeneratedResult();
 }
 
@@ -1268,7 +1278,7 @@ async function fetchReports() {
 
     try {
         const tbody = document.getElementById('reports-table-body');
-        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">載入中...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="height: 480px;" class="px-6 py-4 text-center text-gray-500 align-middle">載入中...</td></tr>';
         
         const res = await fetch(url);
         if (!res.ok) throw new Error('API 無法連線');
@@ -1295,6 +1305,9 @@ function clearFilters() {
     document.getElementById('filter-end-date').value = twToday;
     
     document.getElementById('filter-tester').value = 'all';
+    
+    const filterStatus = document.getElementById('filter-status');
+    if (filterStatus) filterStatus.value = 'all';
     
     fetchReports();
 }
@@ -1450,6 +1463,9 @@ function copyReportNotes(id) {
     syncPreviewHeaderFields();
     syncPreviewMiddleFields();
     syncPreviewTailFields();
+    resetRichPreviewState();
+    updateFieldsHighlight();
+    renderRichPreview();
 
     showToast('已複製報告內容為新範本，修改完案件編號即可儲存！');
 }
@@ -1494,6 +1510,9 @@ function editReport(id) {
     syncPreviewHeaderFields();
     syncPreviewMiddleFields();
     syncPreviewTailFields();
+    resetRichPreviewState();
+    updateFieldsHighlight();
+    renderRichPreview();
 }
 
 // 刪除測試報告
@@ -1639,6 +1658,7 @@ async function fetchBulletins() {
         const res = await fetch(`${API_BASE}/api/collab/bulletins`);
         if (!res.ok) throw new Error('無法載入佈告欄');
         const data = await res.json();
+        currentBulletinsList = data;
         renderBulletinList(data);
     } catch (err) {
         console.error(err);
@@ -1666,24 +1686,31 @@ function renderBulletinList(data) {
         
         const timestampStr = new Date(item.created_at).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         
+        const titleHtml = item.title ? `<h4 class="text-base font-bold text-blue-800 mb-1.5 pb-1 border-b border-blue-100 break-all flex items-center gap-1">📢 ${escapeHtml(item.title)}</h4>` : '';
         const contentHtml = `
             <div class="flex-1">
                 <div class="flex justify-between items-baseline mb-1">
                     <span class="text-xs font-bold text-gray-700">${escapeHtml(item.author)}</span>
                     <span class="text-[10px] text-gray-400">${timestampStr}</span>
                 </div>
+                ${titleHtml}
                 <p class="text-sm text-gray-800 break-all whitespace-pre-wrap">${escapeHtml(item.content)}</p>
             </div>
         `;
 
-        const canDelete = currentUserRole === 'admin' || item.author === currentUser;
-        const deleteBtnHtml = canDelete ? `
-            <button onclick="deleteCollabItem('bulletin', '${item.id}')" class="text-gray-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100 flex-shrink-0">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-            </button>
+        const canModify = currentUserRole === 'admin' || item.author === currentUser;
+        const actionHtml = canModify ? `
+            <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition flex-shrink-0 self-start mt-0.5">
+                <button onclick="openCollabBulletinEditModal('${item.id}')" class="text-gray-300 hover:text-blue-500 transition" title="修改公告">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                </button>
+                <button onclick="deleteCollabItem('bulletin', '${item.id}')" class="text-gray-300 hover:text-red-500 transition" title="刪除公告">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </div>
         ` : '';
 
-        div.innerHTML = `${contentHtml}${deleteBtnHtml}`;
+        div.innerHTML = `${contentHtml}${actionHtml}`;
         listEl.appendChild(div);
     });
 }
@@ -1747,33 +1774,42 @@ function renderCollabList(type) {
 }
 
 async function addCollabItem(type) {
-    const inputEl = document.getElementById(`collab-${type}-input`);
-    const text = inputEl.value.trim();
-    if (!text) return;
-
     if (type === 'bulletin') {
+        const inputEl = document.getElementById('collab-bulletin-input');
+        const titleEl = document.getElementById('collab-bulletin-title');
+        const text = inputEl ? inputEl.value.trim() : '';
+        const title = titleEl ? titleEl.value.trim() : '';
+        if (!text) return;
+
         const token = localStorage.getItem('qa_session_token');
         if (!token) {
             showToast('請先登入', true);
             return;
         }
         
-        inputEl.disabled = true;
+        if (inputEl) inputEl.disabled = true;
+        if (titleEl) titleEl.disabled = true;
         try {
             const res = await fetch(`${API_BASE}/api/collab/bulletins`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, content: text })
+                body: JSON.stringify({ token, content: text, title })
             });
             if (!res.ok) throw new Error('新增失敗');
-            inputEl.value = '';
+            if (inputEl) inputEl.value = '';
+            if (titleEl) titleEl.value = '';
             fetchBulletins();
         } catch (err) {
             showToast(err.message, true);
         } finally {
-            inputEl.disabled = false;
+            if (inputEl) inputEl.disabled = false;
+            if (titleEl) titleEl.disabled = false;
         }
     } else {
+        const inputEl = document.getElementById(`collab-${type}-input`);
+        const text = inputEl.value.trim();
+        if (!text) return;
+
         const displayName = localStorage.getItem('qa_display_name') || '未知名稱';
         const data = getCollabData(type);
         
@@ -1829,6 +1865,66 @@ function toggleCollabTodo(id) {
         item.completed = !item.completed;
         saveCollabData('todo', data);
         renderCollabList('todo');
+    }
+}
+
+function openCollabBulletinEditModal(id) {
+    console.log('[DEBUG] openCollabBulletinEditModal called with id:', id, 'type:', typeof id);
+    console.log('[DEBUG] currentBulletinsList cache:', currentBulletinsList);
+    const bulletin = currentBulletinsList.find(b => String(b.id) === String(id));
+    if (!bulletin) {
+        showToast(`找不到該公告項目 (ID: ${id})，請重新整理網頁`, true);
+        return;
+    }
+    
+    document.getElementById('edit-bulletin-id').value = bulletin.id;
+    document.getElementById('edit-bulletin-title').value = bulletin.title || '';
+    document.getElementById('edit-bulletin-input').value = bulletin.content || '';
+    
+    document.getElementById('collab-bulletin-modal').classList.remove('hidden');
+}
+
+function closeCollabBulletinModal() {
+    document.getElementById('collab-bulletin-modal').classList.add('hidden');
+    document.getElementById('edit-bulletin-id').value = '';
+    document.getElementById('edit-bulletin-title').value = '';
+    document.getElementById('edit-bulletin-input').value = '';
+}
+
+async function saveCollabBulletin() {
+    const id = document.getElementById('edit-bulletin-id').value;
+    const title = document.getElementById('edit-bulletin-title').value.trim();
+    const content = document.getElementById('edit-bulletin-input').value.trim();
+    
+    console.log('[DEBUG] saveCollabBulletin saving id:', id, 'title:', title, 'content length:', content.length);
+    
+    if (!content) {
+        showToast('公告內容不能為空', true);
+        return;
+    }
+    
+    const token = localStorage.getItem('qa_session_token');
+    if (!token) {
+        showToast('請先登入', true);
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/collab/bulletins/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: parseInt(id, 10), token, title, content })
+        });
+        const data = await res.json();
+        console.log('[DEBUG] saveCollabBulletin response:', data);
+        if (!res.ok) throw new Error(data.error || '修改失敗');
+        
+        showToast('公告已修改成功！');
+        closeCollabBulletinModal();
+        fetchBulletins();
+    } catch (err) {
+        console.error('[DEBUG] saveCollabBulletin error:', err);
+        showToast(err.message, true);
     }
 }
 
@@ -2451,6 +2547,15 @@ function initRichPreview() {
     });
 }
 
+function resetRichPreviewState() {
+    const textarea = document.getElementById('generated-result');
+    const preview = document.getElementById('generated-result-preview');
+    if (textarea && preview) {
+        textarea.style.display = 'none';
+        preview.style.display = 'block';
+    }
+}
+
 function renderViewReportRichPreview(report) {
     const textarea = document.getElementById('view-generated-notes');
     const preview = document.getElementById('view-generated-notes-preview');
@@ -2965,9 +3070,9 @@ async function fetchTrashReports() {
                 <td class="px-6 py-4 text-sm font-medium text-gray-900 project-name-col">
                     ${getProjectNameCellHtml(report.project_name, report.category)}
                 </td>
-                <td class="px-6 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${escapeHtml(report.tester_name)}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${escapeHtml(report.test_date || '-')}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-3 align-middle">
+                <td class="px-3 py-4 tester-col" title="${escapeHtml(report.tester_name || '')}">${escapeHtml(report.tester_name)}</td>
+                <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${escapeHtml(report.test_date || '-')}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 flex gap-2 align-middle">
                     ${actionsHtml}
                 </td>
             `;
@@ -3530,8 +3635,8 @@ function updateWorkspaceBlockedButton() {
     countEl.textContent = count === null ? '…' : String(count);
 
     if (wsShowBlockedOnly) {
-        btn.className = 'inline-flex items-center gap-1.5 text-sm font-bold transition px-3 py-1 rounded border border-amber-500 bg-amber-500 text-white shadow-sm';
-        labelEl.textContent = '篩選中：阻礙 / 失敗';
+        btn.className = 'inline-flex items-center gap-1.5 text-sm font-medium transition px-3 py-1 rounded border border-amber-500 bg-amber-500 text-white shadow-sm';
+        labelEl.textContent = '阻礙 / 失敗';
         countEl.className = 'inline-flex min-w-[1.35rem] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-5 bg-white/25 text-white';
         btn.title = '點一下返回日期篩選';
     } else {
@@ -3554,20 +3659,15 @@ function updateWorkspaceBlockedButton() {
     if (endInput) endInput.className = `border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary ${dateMuted}`.trim();
 }
 
-async function refreshWorkspaceBlockedCount() {
-    const cacheCount = filterIssueReports(currentReportsList).length;
-    if (wsBlockedCount === null) {
-        wsBlockedCount = cacheCount;
-        updateWorkspaceBlockedButton();
+function refreshWorkspaceBlockedCount() {
+    let list = filterIssueReports(currentReportsList || []);
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    if (currentUserRole !== 'admin') {
+        list = list.filter(isReportOwnedByCurrentUser);
     }
-
-    try {
-        const list = await fetchWorkspaceBlockedReports();
-        wsBlockedCount = list.length;
-        if (wsShowBlockedOnly) wsBlockedReportsList = list;
-    } catch (err) {
-        console.warn('refreshWorkspaceBlockedCount', err);
-        wsBlockedCount = cacheCount;
+    wsBlockedCount = list.length;
+    if (wsShowBlockedOnly) {
+        wsBlockedReportsList = list;
     }
     updateWorkspaceBlockedButton();
 }
@@ -3630,30 +3730,24 @@ async function fetchWorkspaceBlockedReports() {
     }
 }
 
-async function toggleWorkspaceBlockedView() {
+function toggleWorkspaceBlockedView() {
     wsShowBlockedOnly = !wsShowBlockedOnly;
     updateWorkspaceBlockedButton();
 
     if (wsShowBlockedOnly) {
-        const tbody = document.getElementById('ws-recent-reports-body');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">載入阻礙 / 失敗案件中...</td></tr>';
-        try {
-            wsBlockedReportsList = await fetchWorkspaceBlockedReports();
-            wsBlockedCount = wsBlockedReportsList.length;
-            if (wsBlockedCount === 0) {
-                wsShowBlockedOnly = false;
-                wsBlockedReportsList = null;
-                updateWorkspaceBlockedButton();
-                showToast('目前沒有阻礙或失敗的案件');
-                renderWorkspaceTable();
-                return;
-            }
-        } catch (err) {
-            console.error(err);
+        let filtered = filterIssueReports(currentReportsList || []);
+        const currentUserRole = localStorage.getItem('qa_role') || 'user';
+        if (currentUserRole !== 'admin') {
+            filtered = filtered.filter(isReportOwnedByCurrentUser);
+        }
+        wsBlockedReportsList = filtered;
+        wsBlockedCount = filtered.length;
+
+        if (wsBlockedCount === 0) {
             wsShowBlockedOnly = false;
             wsBlockedReportsList = null;
             updateWorkspaceBlockedButton();
-            showToast(err.message, true);
+            showToast('目前沒有阻礙或失敗的案件');
             renderWorkspaceTable();
             return;
         }
@@ -3684,6 +3778,19 @@ function renderWorkspaceTable() {
     
     const startInput = document.getElementById('ws-filter-date-start');
     const endInput = document.getElementById('ws-filter-date-end');
+    
+    const typeValForAuto = document.getElementById('ws-filter-type') ? document.getElementById('ws-filter-type').value : 'all';
+    const catValForAuto = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
+    const statusValForAuto = document.getElementById('ws-filter-status') ? document.getElementById('ws-filter-status').value : 'all';
+    const hasOtherFilters = (typeValForAuto !== 'all' || catValForAuto !== 'all' || statusValForAuto !== 'all');
+    
+    if (hasOtherFilters && startInput && endInput) {
+        const twToday = getTaiwanToday();
+        if (startInput.value === twToday && endInput.value === twToday) {
+            startInput.value = getTaiwanFirstDay();
+        }
+    }
+    
     const start = startInput ? startInput.value : '';
     const end = endInput ? endInput.value : '';
     
@@ -3705,6 +3812,11 @@ function renderWorkspaceTable() {
     
     const catVal = document.getElementById('ws-filter-category') ? document.getElementById('ws-filter-category').value : 'all';
     if (catVal !== 'all') filteredData = filteredData.filter(r => isReportPinned(r) || r.category === catVal);
+
+    const statusVal = document.getElementById('ws-filter-status') ? document.getElementById('ws-filter-status').value : 'all';
+    if (statusVal !== 'all') {
+        filteredData = filteredData.filter(r => isReportPinned(r) || (r.status && r.status.toLowerCase() === statusVal.toLowerCase()));
+    }
 
     if (filteredData.length === 0) {
         const emptyMsg = wsShowBlockedOnly ? '目前沒有阻礙或失敗的案件' : '尚無測試紀錄';
@@ -3816,6 +3928,26 @@ function renderWorkspaceAdminModifiedTable() {
 function renderReportsTable() {
     const tbody = document.getElementById('reports-table-body');
     if (!tbody) return;
+
+    // 如果有其他篩選器作用，且日期是預設的「今天到今天」，自動拉大為「月初到今天」
+    const typeValForAuto = document.getElementById('filter-type') ? document.getElementById('filter-type').value : 'all';
+    const catValForAuto = document.getElementById('filter-category') ? document.getElementById('filter-category').value : 'all';
+    const statusValForAuto = document.getElementById('filter-status') ? document.getElementById('filter-status').value : 'all';
+    const testerValForAuto = document.getElementById('filter-tester') ? document.getElementById('filter-tester').value : 'all';
+    const hasOtherFilters = (typeValForAuto !== 'all' || catValForAuto !== 'all' || statusValForAuto !== 'all' || testerValForAuto !== 'all');
+
+    const startInput = document.getElementById('filter-start-date');
+    const endInput = document.getElementById('filter-end-date');
+
+    if (hasOtherFilters && startInput && endInput) {
+        const twToday = getTaiwanToday();
+        if (startInput.value === twToday && endInput.value === twToday) {
+            startInput.value = getTaiwanFirstDay();
+            fetchReports();
+            return;
+        }
+    }
+
     tbody.innerHTML = '';
     
     let filteredData = currentReportsList || [];
@@ -3826,6 +3958,11 @@ function renderReportsTable() {
     
     const catVal = document.getElementById('filter-category') ? document.getElementById('filter-category').value : 'all';
     if (catVal !== 'all') filteredData = filteredData.filter(r => r.category === catVal);
+    
+    const statusVal = document.getElementById('filter-status') ? document.getElementById('filter-status').value : 'all';
+    if (statusVal !== 'all') {
+        filteredData = filteredData.filter(r => r.status && r.status.toLowerCase() === statusVal.toLowerCase());
+    }
     
     const testerVal = document.getElementById('filter-tester') ? document.getElementById('filter-tester').value : 'all';
     if (testerVal !== 'all') {
@@ -4392,7 +4529,11 @@ async function openUaPublishModal() {
         if (manualBlock) manualBlock.classList.remove('hidden');
     } catch (err) {
         document.getElementById('ua-publish-loading').classList.add('hidden');
-        showToast('無法載入待辦工單：' + err.message, true);
+        let errMsg = err.message;
+        if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch')) {
+            errMsg = '本機代理伺服器（ua-proxy）未啟動，請雙擊專案根目錄下的 start-ua-proxy.bat';
+        }
+        showToast('無法載入待辦工單：' + errMsg, true);
         closeUaPublishModal();
     }
 }
@@ -4536,7 +4677,11 @@ async function confirmUaPublish() {
             confirmBtn.innerHTML = originalText;
         }
     } catch (err) {
-        showToast('發布時發生錯誤：' + err.message, true);
+        let errMsg = err.message;
+        if (errMsg.includes('Failed to fetch') || errMsg.includes('fetch')) {
+            errMsg = '本機代理伺服器（ua-proxy）未啟動，請雙擊專案根目錄下的 start-ua-proxy.bat';
+        }
+        showToast('發布時發生錯誤：' + errMsg, true);
         confirmBtn.disabled = false;
         confirmBtn.style.opacity = '1';
         confirmBtn.innerHTML = originalText;

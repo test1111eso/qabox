@@ -54,6 +54,18 @@ async function ensureOwnerUserIdColumn(env) {
   }
 }
 
+async function ensureBulletinsTitleColumn(env) {
+  try {
+    const { results } = await env.DB.prepare('PRAGMA table_info(bulletins)').all();
+    const hasColumn = (results || []).some((col) => col.name === 'title');
+    if (!hasColumn) {
+      await env.DB.prepare('ALTER TABLE bulletins ADD COLUMN title TEXT').run();
+    }
+  } catch (e) {
+    console.error('ensureBulletinsTitleColumn error', e);
+  }
+}
+
 async function backfillReportOwnershipForUser(env, user) {
   if (!user?.id) return;
   await ensureOwnerUserIdColumn(env);
@@ -655,7 +667,7 @@ export default {
             if (rosterStr && rosterStr.value) roster = JSON.parse(rosterStr.value);
             
             if (roster.length > 0) {
-                const startTimestamp = startStr && startStr.value ? parseInt(startStr.value, 10) : Date.now();
+                startTimestamp = startStr && startStr.value ? parseInt(startStr.value, 10) : Date.now();
                 
                 // 計算對應的台灣時間(UTC+8)星期一凌晨 00:00:00
                 const getTwMonday = (ts) => {
@@ -857,6 +869,7 @@ export default {
 
       // Bulletins - Get All
       if (url.pathname === '/api/collab/bulletins' && request.method === 'GET') {
+        await ensureBulletinsTitleColumn(env);
         const { results } = await env.DB.prepare('SELECT * FROM bulletins ORDER BY created_at DESC').all();
         return new Response(JSON.stringify(results), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -866,15 +879,17 @@ export default {
       // Bulletins - Create
       if (url.pathname === '/api/collab/bulletins' && request.method === 'POST') {
         const body = await request.json();
-        const { token, content } = body;
+        const { token, content, title } = body;
         
         const user = await getUserByToken(token, env);
         if (!user) {
           return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
         }
         
-        const result = await env.DB.prepare("INSERT INTO bulletins (content, author, created_at) VALUES (?, ?, datetime('now', '+8 hours'))")
-          .bind(content, user.display_name)
+        await ensureBulletinsTitleColumn(env);
+        const titleStr = title ? String(title).trim() : null;
+        const result = await env.DB.prepare("INSERT INTO bulletins (title, content, author, created_at) VALUES (?, ?, ?, datetime('now', '+8 hours'))")
+          .bind(titleStr, content, user.display_name)
           .run();
           
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
@@ -895,6 +910,36 @@ export default {
         
         await env.DB.prepare('DELETE FROM bulletins WHERE id = ?').bind(id).run();
         return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // Bulletins - Update
+      if (url.pathname === '/api/collab/bulletins/update' && request.method === 'POST') {
+        const body = await request.json();
+        const { id, token, content, title } = body;
+        
+        const user = await getUserByToken(token, env);
+        if (!user) {
+          return new Response(JSON.stringify({ error: '未授權，請重新登入' }), { status: 401, headers: corsHeaders });
+        }
+        
+        const bulletin = await env.DB.prepare('SELECT * FROM bulletins WHERE id = ?').bind(id).first();
+        if (!bulletin) {
+          return new Response(JSON.stringify({ error: '公告不存在' }), { status: 404, headers: corsHeaders });
+        }
+        
+        if (user.role !== 'admin' && bulletin.author !== user.display_name) {
+          return new Response(JSON.stringify({ error: '您無權修改此公告' }), { status: 403, headers: corsHeaders });
+        }
+        
+        await ensureBulletinsTitleColumn(env);
+        const titleStr = title ? String(title).trim() : null;
+        await env.DB.prepare('UPDATE bulletins SET title = ?, content = ? WHERE id = ?')
+          .bind(titleStr, content, id)
+          .run();
+          
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // ===================== UA 代理端點 =====================

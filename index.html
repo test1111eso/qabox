@@ -37,8 +37,7 @@
                     <div class="flex items-center gap-3">
                         <!-- Icon placeholder -->
                         <button type="button" id="nav-app-icon" onclick="handleAppIconClick()"
-                            class="relative shrink-0 w-8 h-8 cursor-pointer hover:opacity-80 transition"
-                            title="已是最新版">
+                            class="relative shrink-0 w-8 h-8 cursor-pointer hover:opacity-80 transition" title="已是最新版">
                             <svg id="nav-app-icon-ok" class="w-8 h-8 text-primary" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -51,8 +50,10 @@
                                 </path>
                             </svg>
                         </button>
-                        <span class="font-bold text-xl tracking-wide cursor-pointer hover:opacity-80 transition" onclick="switchView('dashboard')">Q-Draft 除草室</span>
-                        <div class="hidden sm:flex items-center bg-yellow-50 text-yellow-800 px-3 py-1 rounded-md text-sm font-bold border border-yellow-200 shadow-sm ml-2">
+                        <span class="font-bold text-xl tracking-wide cursor-pointer hover:opacity-80 transition"
+                            onclick="switchView('dashboard')">Q-Draft 除草室</span>
+                        <div
+                            class="hidden sm:flex items-center bg-yellow-50 text-yellow-800 px-3 py-1 rounded-md text-sm font-bold border border-yellow-200 shadow-sm ml-2">
                             ⭐ 本週除草員：<span id="ws-duty-person" class="ml-1 text-yellow-900">無</span>
                         </div>
                     </div>
@@ -118,15 +119,6 @@
                                 </path>
                             </svg>
                             月報表
-                        </button>
-                        <button onclick="openTrashModal()"
-                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-5 py-2.5 rounded-lg text-sm font-bold transition shadow-sm border border-gray-200 flex items-center gap-2 transform hover:scale-105">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                </path>
-                            </svg>
-                            垃圾桶
                         </button>
                     </div>
                 </div>
@@ -244,7 +236,8 @@
                             <span class="text-gray-400">-</span>
                             <input type="date" id="ws-filter-date-end" onchange="filterWorkspaceReports()"
                                 class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
-                            <button onclick="clearWorkspaceDate()" class="text-sm text-gray-500 hover:text-primary transition bg-white hover:bg-gray-100 px-3 py-1 rounded border border-gray-300 shadow-sm ml-1">清除</button>
+                            <button onclick="clearWorkspaceDate()"
+                                class="text-sm text-gray-500 hover:text-primary transition bg-white hover:bg-gray-100 px-3 py-1 rounded border border-gray-300 shadow-sm ml-1">今日</button>
                             <button type="button" id="ws-filter-blocked-btn" onclick="toggleWorkspaceBlockedView()"
                                 title="列出所有日期的阻礙 / 失敗案件"
                                 class="inline-flex items-center gap-1.5 text-sm transition px-3 py-1 rounded border shadow-sm">
@@ -268,6 +261,13 @@
                                 <option value="現版求才">現版求才</option>
                                 <option value="活動">活動</option>
                                 <option value="其他">其他</option>
+                            </select>
+                            <select id="ws-filter-status" onchange="renderWorkspaceTable()"
+                                class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-primary focus:border-primary">
+                                <option value="all">狀態 (全部)</option>
+                                <option value="Pass">Pass</option>
+                                <option value="Fail">Fail</option>
+                                <option value="Blocked">阻礙 (Blocked)</option>
                             </select>
                         </div>
                         <button onclick="switchView('reports')"
@@ -412,9 +412,7 @@
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative">
                         <div class="px-5 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                             <h3 class="font-bold text-gray-800" id="dashboard-details-title">案件清單</h3>
-                            <button
-                                onclick="closeDashboardDetails()"
-                                class="text-gray-400 hover:text-gray-600">
+                            <button onclick="closeDashboardDetails()" class="text-gray-400 hover:text-gray-600">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M6 18L18 6M6 6l12 12"></path>
@@ -592,6 +590,16 @@
                             <option value="其他">其他</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">狀態</label>
+                        <select id="filter-status" onchange="renderReportsTable()"
+                            class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary bg-white">
+                            <option value="all">全部</option>
+                            <option value="Pass">Pass</option>
+                            <option value="Fail">Fail</option>
+                            <option value="Blocked">Blocked</option>
+                        </select>
+                    </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">測試員</label>
@@ -603,18 +611,14 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
-                        <input type="date" id="filter-start-date"
+                        <input type="date" id="filter-start-date" onchange="fetchReports()"
                             class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
-                        <input type="date" id="filter-end-date"
+                        <input type="date" id="filter-end-date" onchange="fetchReports()"
                             class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-primary focus:border-primary">
                     </div>
-                    <button onclick="fetchReports()"
-                        class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-medium transition shadow-sm">
-                        搜尋
-                    </button>
                     <button onclick="setReportsToday()"
                         class="bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100 px-4 py-2 rounded-md text-sm font-medium transition shadow-sm">今日</button>
                     <button onclick="clearFilters()"
@@ -708,12 +712,17 @@
                         <div class="p-4 flex flex-col gap-3 overflow-y-auto flex-1" id="collab-bulletin-list">
                             <!-- Items -->
                         </div>
-                        <div class="p-4 border-t border-gray-100 bg-gray-50 flex gap-2">
-                            <input type="text" id="collab-bulletin-input" placeholder="新增公告..."
-                                class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary"
-                                onkeypress="if(event.key === 'Enter') addCollabItem('bulletin')">
-                            <button onclick="addCollabItem('bulletin')"
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">發佈</button>
+                        <div class="p-4 border-t border-gray-100 bg-gray-50 flex flex-col gap-2">
+                            <input type="text" id="collab-bulletin-title" placeholder="公告標題 (選填)..."
+                                class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary">
+                            <div class="flex gap-2">
+                                <textarea id="collab-bulletin-input" placeholder="新增公告內容..." rows="2"
+                                    class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary resize-none"
+                                    onkeydown="if(event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); addCollabItem('bulletin'); }"></textarea>
+                                <button onclick="addCollabItem('bulletin')"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm h-fit self-end">發佈</button>
+                            </div>
+                            <span class="text-[10px] text-gray-400 -mt-1">提示：按下 Ctrl + Enter 亦可快速發佈</span>
                         </div>
                     </div>
 
@@ -786,7 +795,8 @@
                             <h2 class="text-2xl font-bold text-gray-900">📅 每週值日生排班表</h2>
                             <p class="text-sm text-gray-500 mt-1">拖曳下方卡片可調整排班順序，系統會自動按週輪替。</p>
                         </div>
-                        <button onclick="saveDutyRoster()" class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-medium shadow-sm transition">
+                        <button onclick="saveDutyRoster()"
+                            class="bg-primary hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-medium shadow-sm transition">
                             儲存排序
                         </button>
                     </div>
@@ -854,28 +864,28 @@
                                 測試紀錄內容
                             </h4>
                             <div class="flex items-center gap-2">
-                            <button id="view-edit-report-btn" onclick="editFromViewModal()"
-                                class="hidden text-xs bg-indigo-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-indigo-700 transition shadow-sm font-medium">
-                                修改
-                            </button>
-                            <button id="view-ua-publish-btn" onclick="openUaPublishModal()"
-                                class="text-xs bg-purple-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-purple-700 transition shadow-sm font-medium">
-                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
-                                    </path>
-                                </svg>
-                                發布至工單
-                            </button>
-                            <button onclick="copyViewReportNotes()"
-                                class="text-xs bg-primary text-white px-3 py-1.5 rounded flex items-center hover:bg-blue-600 transition shadow-sm font-medium">
-                                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
-                                    </path>
-                                </svg>
-                                複製報告
-                            </button>
+                                <button id="view-edit-report-btn" onclick="editFromViewModal()"
+                                    class="hidden text-xs bg-indigo-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-indigo-700 transition shadow-sm font-medium">
+                                    修改
+                                </button>
+                                <button id="view-ua-publish-btn" onclick="openUaPublishModal()"
+                                    class="text-xs bg-purple-600 text-white px-3 py-1.5 rounded flex items-center hover:bg-purple-700 transition shadow-sm font-medium">
+                                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8">
+                                        </path>
+                                    </svg>
+                                    發布至工單
+                                </button>
+                                <button onclick="copyViewReportNotes()"
+                                    class="text-xs bg-primary text-white px-3 py-1.5 rounded flex items-center hover:bg-blue-600 transition shadow-sm font-medium">
+                                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                                        </path>
+                                    </svg>
+                                    複製報告
+                                </button>
                             </div>
                         </div>
                         <textarea id="view-generated-notes"
@@ -1045,8 +1055,7 @@
                                         <button type="button" onclick="setEnv('https://recruit.1111.com.tw')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
                                             data-env="https://recruit.1111.com.tw">招募</button>
-                                        <button type="button"
-                                            onclick="setEnv('https://recruit-qa.1111.com.tw')"
+                                        <button type="button" onclick="setEnv('https://recruit-qa.1111.com.tw')"
                                             class="env-btn text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded border border-gray-200 transition"
                                             data-env="https://recruit-qa.1111.com.tw">招募QA</button>
                                         <button type="button" onclick="setEnv('https://recruit-stg.1111.com.tw/')"
@@ -1209,12 +1218,14 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-1">
-                                    <label class="block text-sm font-medium text-gray-700">備註 <span class="text-xs font-normal text-gray-500">（工單帶入）</span></label>
+                                    <label class="block text-sm font-medium text-gray-700">備註 <span
+                                            class="text-xs font-normal text-gray-500">（工單帶入）</span></label>
                                     <div class="flex gap-3">
                                         <label
                                             class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
                                             <input type="radio" name="ticket-notes-preset" value="by pass"
-                                                onchange="setTicketNotes('by pass')" class="text-primary focus:ring-primary">
+                                                onchange="setTicketNotes('by pass')"
+                                                class="text-primary focus:ring-primary">
                                             by pass
                                         </label>
                                         <label
@@ -1235,8 +1246,7 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">狀態 <span
                                         class="text-red-500">*</span></label>
-                                <select id="form-status" required
-                                    onchange="updateGeneratedResult()"
+                                <select id="form-status" required onchange="updateGeneratedResult()"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
                                     <option value="Pass">Pass (通過)</option>
                                     <option value="Fail">Fail (失敗)</option>
@@ -1250,8 +1260,7 @@
                     <div class="w-full lg:w-1/2 p-6 flex flex-col bg-gray-50">
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-1">測試員備註</label>
-                            <textarea id="form-notes" rows="2"
-                                placeholder="輸入測試員備註..."
+                            <textarea id="form-notes" rows="2" placeholder="輸入測試員備註..."
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-primary focus:border-primary bg-white"></textarea>
                         </div>
                         <div class="flex justify-between items-center mb-3">
@@ -1400,11 +1409,11 @@
                 <div class="bg-white rounded-lg border border-gray-100 overflow-hidden shadow-inner">
                     <table class="compact-report-table divide-y divide-gray-200" id="trash-table">
                         <colgroup>
-                                    <col style="width:158px">
+                            <col style="width:158px">
                             <col>
                             <col style="width:88px">
-                            <col style="width:100px">
                             <col style="width:120px">
+                            <col style="width:180px">
                         </colgroup>
                         <thead class="bg-gray-50">
                             <tr>
@@ -1504,7 +1513,8 @@
                     <button onclick="closeUaSettingsModal()"
                         class="text-gray-400 hover:text-gray-600 focus:outline-none">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12">
                             </path>
                         </svg>
                     </button>
@@ -1538,7 +1548,8 @@
         <!-- Modal: 發布至 UA 工單 -->
         <div id="ua-publish-modal"
             class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
-            <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
+            <div
+                class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[85vh]">
                 <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
                         <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1551,7 +1562,8 @@
                     <button onclick="closeUaPublishModal()"
                         class="text-gray-400 hover:text-gray-600 focus:outline-none">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12">
                             </path>
                         </svg>
                     </button>
@@ -1559,7 +1571,8 @@
                 <div class="p-6 overflow-y-auto flex-1">
                     <!-- Loading state -->
                     <div id="ua-publish-loading" class="text-center py-8 text-gray-500">
-                        <svg class="w-8 h-8 mx-auto mb-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="animation: spin 1s linear infinite">
+                        <svg class="w-8 h-8 mx-auto mb-2 text-purple-400" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24" style="animation: spin 1s linear infinite">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
                             </path>
@@ -1572,21 +1585,24 @@
                     </div>
                     <!-- Empty state -->
                     <div id="ua-publish-empty" class="hidden text-center py-8 text-gray-400">
-                        <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
                             </path>
                         </svg>
                         <p class="text-sm">找不到工單？您可以直接手動輸入</p>
                     </div>
-                    
+
                     <!-- Manual input fallback -->
                     <div id="ua-publish-manual" class="mt-4 pt-4 border-t border-gray-100 hidden">
                         <p class="text-sm font-medium text-gray-700 mb-2">手動指定目標工單：</p>
                         <div class="flex gap-2">
-                            <input type="text" id="ua-manual-id-input" oninput="handleUaManualInput()" placeholder="貼上工單網址或 ID (例如 9869)" 
+                            <input type="text" id="ua-manual-id-input" oninput="handleUaManualInput()"
+                                placeholder="貼上工單網址或 ID (例如 9869)"
                                 class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500">
-                            <select id="ua-manual-kind-select" onchange="handleUaManualInput()" class="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 bg-white">
+                            <select id="ua-manual-kind-select" onchange="handleUaManualInput()"
+                                class="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 bg-white">
                                 <option value="2" selected>發布為子單</option>
                                 <option value="1">發布為母單</option>
                             </select>
@@ -1610,11 +1626,47 @@
                         </button>
                     </div>
                 </div>
+        </div>
+    </div>
+
+        <!-- 編輯公告 Modal -->
+        <div id="collab-bulletin-modal"
+            class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden z-50 flex items-center justify-center fade-in backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden flex flex-col">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-900 flex items-center gap-1.5">
+                        <span>✏️</span> 編輯佈告欄公告
+                    </h3>
+                    <button onclick="closeCollabBulletinModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 flex flex-col gap-4">
+                    <input type="hidden" id="edit-bulletin-id">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">公告標題</label>
+                        <input type="text" id="edit-bulletin-title" placeholder="標題 (選填)..."
+                            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">公告內容</label>
+                        <textarea id="edit-bulletin-input" placeholder="內文..." rows="4"
+                            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary resize-none"></textarea>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                    <button onclick="closeCollabBulletinModal()"
+                        class="px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-100 transition">取消</button>
+                    <button onclick="saveCollabBulletin()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">儲存變更</button>
+                </div>
             </div>
         </div>
 
         <!-- Scripts -->
-        <script src="app.js?v=20260603_7"></script>
+        <script src="app.js?v=20260618_1"></script>
 </body>
 
 </html>
