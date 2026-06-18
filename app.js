@@ -1870,18 +1870,29 @@ function toggleCollabTodo(id) {
 
 function openCollabBulletinEditModal(id) {
     console.log('[DEBUG] openCollabBulletinEditModal called with id:', id, 'type:', typeof id);
-    console.log('[DEBUG] currentBulletinsList cache:', currentBulletinsList);
+    
     const bulletin = currentBulletinsList.find(b => String(b.id) === String(id));
     if (!bulletin) {
         showToast(`找不到該公告項目 (ID: ${id})，請重新整理網頁`, true);
         return;
     }
     
-    document.getElementById('edit-bulletin-id').value = bulletin.id;
-    document.getElementById('edit-bulletin-title').value = bulletin.title || '';
-    document.getElementById('edit-bulletin-input').value = bulletin.content || '';
+    const modalEl = document.getElementById('collab-bulletin-modal');
+    if (!modalEl) {
+        showToast('編輯公告彈窗 (DOM) 不存在，可能網頁尚未部署完成或快取未更新，請重新整理網頁', true);
+        console.error('[DEBUG] collab-bulletin-modal is missing in DOM!');
+        return;
+    }
     
-    document.getElementById('collab-bulletin-modal').classList.remove('hidden');
+    const editIdEl = document.getElementById('edit-bulletin-id');
+    const editTitleEl = document.getElementById('edit-bulletin-title');
+    const editInputEl = document.getElementById('edit-bulletin-input');
+    
+    if (editIdEl) editIdEl.value = bulletin.id;
+    if (editTitleEl) editTitleEl.value = bulletin.title || '';
+    if (editInputEl) editInputEl.value = bulletin.content || '';
+    
+    modalEl.classList.remove('hidden');
 }
 
 function closeCollabBulletinModal() {
