@@ -713,15 +713,15 @@
                             <!-- Items -->
                         </div>
                         <div class="p-4 border-t border-gray-100 bg-gray-50 flex flex-col gap-2">
-                            <input type="text" id="collab-bulletin-title" placeholder="公告標題 (選填)..."
-                                class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary">
                             <div class="flex gap-2">
-                                <textarea id="collab-bulletin-input" placeholder="新增公告內容..." rows="2"
-                                    class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary resize-none"
-                                    onkeydown="if(event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); addCollabItem('bulletin'); }"></textarea>
+                                <input type="text" id="collab-bulletin-title" placeholder="公告標題 (選填)..."
+                                    class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary">
                                 <button onclick="addCollabItem('bulletin')"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm h-fit self-end">發佈</button>
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm h-fit self-center">發佈</button>
                             </div>
+                            <textarea id="collab-bulletin-input" placeholder="新增公告內容..." rows="2"
+                                class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary resize-none"
+                                onkeydown="if(event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); addCollabItem('bulletin'); }"></textarea>
                             <span class="text-[10px] text-gray-400 -mt-1">提示：按下 Ctrl + Enter 亦可快速發佈</span>
                         </div>
                     </div>
@@ -1666,7 +1666,7 @@
     </div>
 
         <!-- Scripts -->
-        <script src="app.js?v=20260618_2"></script>
+        <script src="app.js?v=20260618_3"></script>
 </body>
 
 </html>
