@@ -1587,6 +1587,7 @@ async function submitReport(e) {
         status: document.getElementById('form-status').value,
         bug_link: document.getElementById('form-test-case').value.trim(), // 存在資料庫的 bug_link 欄位
         category: document.querySelector('input[name="report_category"]:checked')?.value || '其他',
+        report_type: currentReportMode === 'prod' ? 'prod' : 'normal',
         raw_ticket: document.getElementById('ticket-input').value,
         notes: prepareNotesForSave(),
     };
@@ -1621,7 +1622,7 @@ async function submitReport(e) {
         const existingReport = isEditMode ? currentReportsList.find(r => r.id === savedId) : null;
         upsertReportInCache({
             id: savedId,
-            case_no: payload.case_no,
+            case_no: isEditMode ? payload.case_no : (data.case_no || payload.case_no),
             project_name: payload.project_name,
             tester_name: payload.tester_name,
             test_date: payload.test_date,
