@@ -46,6 +46,89 @@ function userOwnsReport(user, report) {
 
 const REPORT_OWNER_BASE_SQL = `TRIM(CASE WHEN INSTR(tester_name, ' - ') > 0 THEN SUBSTR(tester_name, 1, INSTR(tester_name, ' - ') - 1) ELSE tester_name END)`;
 
+const nextCaseNoGuard = { initialized: false };
+
+function normalizeReportType(type = '') {
+  const value = String(type || '').trim().toLowerCase();
+  if (value === 'prod' || value === 'production' || value === 'p') return 'prod';
+  return 'normal';
+}
+
+function extractCaseSeqFromNo(caseNo) {
+  const match = String(caseNo || '').match(/-(\d+)$/);
+  if (!match) return 0;
+  return parseInt(match[1], 10) || 0;
+}
+
+async function ensureCaseNoUniqueIndex(env) {
+  if (nextCaseNoGuard.initialized) return;
+  try {
+    await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_case_no ON reports(case_no)').run();
+  } catch (e) {
+    console.error('ensureCaseNoUniqueIndex', e);
+  } finally {
+    nextCaseNoGuard.initialized = true;
+  }
+}
+
+function isDuplicateCaseNoError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  return msg.includes('unique constraint failed') && msg.includes('case_no');
+}
+
+async function getMaxCaseSeqByType(env, datePrefix, reportType) {
+  const prefix = reportType === 'prod' ? 'P' : 'T';
+  const { results } = await env.DB.prepare('SELECT case_no FROM reports WHERE case_no LIKE ?').bind(`${prefix}${datePrefix}-%`).all();
+
+  let maxSeq = 0;
+  for (const row of results || []) {
+    const seq = extractCaseSeqFromNo(row.case_no);
+    if (seq > maxSeq) maxSeq = seq;
+  }
+  return maxSeq;
+}
+
+async function allocateNextCaseNo(env, dateStr, reportType) {
+  const datePrefix = String(dateStr || '').replace(/-/g, '');
+  if (!datePrefix) return '';
+
+  const type = normalizeReportType(reportType);
+  const prefix = type === 'prod' ? 'P' : 'T';
+  const counterKey = `case_no_seq:${prefix}:${datePrefix}`;
+  const seqCounterValue = await getMaxCaseSeqByType(env, datePrefix, type);
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const exists = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
+    if (!exists) {
+      try {
+        await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').bind(counterKey, String(seqCounterValue)).run();
+      } catch (err) {
+        // another request may have initialized it first; continue
+      }
+    } else {
+      const current = parseInt(exists.value, 10);
+      if (!Number.isFinite(current) || current < seqCounterValue) {
+        await env.DB.prepare('UPDATE settings SET value = ? WHERE key = ?').bind(String(seqCounterValue), counterKey).run();
+      }
+    }
+
+    const updateResult = await env.DB.prepare('UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = ?').bind(counterKey).run();
+    if (!updateResult?.meta || updateResult.meta.changes === 0) {
+      continue;
+    }
+
+    const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
+    const nextSeq = parseInt(nextSeqRow?.value, 10) || 0;
+    const nextCaseNo = `${prefix}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
+    const duplicated = await env.DB.prepare('SELECT id FROM reports WHERE case_no = ? LIMIT 1').bind(nextCaseNo).first();
+    if (!duplicated) {
+      return nextCaseNo;
+    }
+  }
+
+  return '';
+}
+
 async function ensureOwnerUserIdColumn(env) {
   const { results } = await env.DB.prepare('PRAGMA table_info(reports)').all();
   const hasColumn = (results || []).some((col) => col.name === 'owner_user_id');
@@ -314,26 +397,11 @@ export default {
           return new Response(JSON.stringify({ error: 'Missing date parameter' }), { status: 400, headers: corsHeaders });
         }
         
-        const datePrefix = dateStr.replace(/-/g, '');
-        // 找尋當日所有案件編號 (包含 P開頭、T開頭、以及舊版無英文字母開頭)，找出最大的流水號
-        const { results } = await env.DB.prepare(
-          `SELECT case_no FROM reports WHERE case_no LIKE ? OR case_no LIKE ? OR case_no LIKE ?`
-        ).bind(`${datePrefix}-%`, `T${datePrefix}-%`, `P${datePrefix}-%`).all();
-        
-        let maxSeq = 0;
-        if (results && results.length > 0) {
-          results.forEach(row => {
-            const seqMatch = row.case_no.match(/-(\d+)$/);
-            if (seqMatch) {
-              const seq = parseInt(seqMatch[1], 10);
-              if (seq > maxSeq) maxSeq = seq;
-            }
-          });
+        const nextCaseNo = await allocateNextCaseNo(env, dateStr, type);
+        if (!nextCaseNo) {
+          return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
         }
-        
-        const nextSeq = maxSeq + 1;
-        const letter = type === 'prod' ? 'P' : 'T';
-        const nextCaseNo = `${letter}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
+
         
         return new Response(JSON.stringify({ nextCaseNo }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -363,17 +431,45 @@ export default {
       // 3. 新增報告
       if (url.pathname === '/api/reports' && request.method === 'POST') {
         const body = await request.json();
-        const { token, case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket } = body;
+        const { token, case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, report_type } = body;
         await migrateReportOwnerUserIdIfNeeded(env);
 
         let ownerUserId = null;
         const user = await getUserByToken(token, env);
         if (user) ownerUserId = user.id;
 
-        const result = await env.DB.prepare(
-          "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now', '+8 hours'))"
-        ).bind(case_no, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, ownerUserId).run();
-        
+        await ensureCaseNoUniqueIndex(env);
+        const reportType = normalizeReportType(String(case_no || '').toUpperCase().startsWith('P') ? 'prod' : report_type || 'normal');
+        let finalCaseNo = (case_no || '').trim();
+        if (!finalCaseNo || finalCaseNo === '計算中...') {
+          finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
+          if (!finalCaseNo) {
+            return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
+          }
+        }
+
+        let result;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
+            result = await env.DB.prepare(
+              "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now', '+8 hours'))"
+            ).bind(finalCaseNo, project_name, tester_name, test_date, status, bug_link, notes, category || '其他', raw_ticket || null, ownerUserId).run();
+            break;
+          } catch (err) {
+            if (!isDuplicateCaseNoError(err)) {
+              throw err;
+            }
+            finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
+            if (!finalCaseNo) {
+              return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
+            }
+          }
+        }
+
+        if (!result) {
+          return new Response(JSON.stringify({ error: 'Unable to create report after retries' }), { status: 500, headers: corsHeaders });
+        }
+
         return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
