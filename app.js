@@ -795,7 +795,10 @@ async function updateNextCaseNo(dateStr) {
     updateGeneratedResult();
     
     try {
-        const res = await fetch(`${API_BASE}/api/reports/next-case-no?date=${encodeURIComponent(dateStr)}&type=${currentReportMode}`);
+        const res = await fetch(
+            `${API_BASE}/api/reports/next-case-no?date=${encodeURIComponent(dateStr)}&type=${currentReportMode}&_ts=${Date.now()}`,
+            { cache: 'no-store' }
+        );
         if (!res.ok) throw new Error('API 回傳異常');
         const data = await res.json();
         
