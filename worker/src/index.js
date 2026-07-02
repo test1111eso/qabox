@@ -76,6 +76,19 @@ function isDuplicateCaseNoError(err) {
   return msg.includes('unique constraint failed') && msg.includes('case_no');
 }
 
+function isGeneratedCaseNo(caseNo, reportType, dateStr) {
+  const normalizedType = normalizeReportType(reportType);
+  const typeChar = normalizedType === 'prod' ? 'P' : 'T';
+  const normalizedCaseNo = String(caseNo || '').trim().toUpperCase();
+  const datePrefix = String(dateStr || '').replace(/-/g, '');
+
+  if (!normalizedCaseNo || !/^\d{8}$/.test(datePrefix)) {
+    return false;
+  }
+
+  return normalizedCaseNo.startsWith(`${typeChar}${datePrefix}-`) && /\w+-\d+$/.test(normalizedCaseNo);
+}
+
 async function getMaxCaseSeqByType(env, datePrefix, reportType) {
   const prefix = reportType === 'prod' ? 'P' : 'T';
   const { results } = await env.DB.prepare('SELECT case_no FROM reports WHERE case_no LIKE ?').bind(`${prefix}${datePrefix}-%`).all();
@@ -439,17 +452,27 @@ export default {
         if (user) ownerUserId = user.id;
 
         await ensureCaseNoUniqueIndex(env);
-        const reportType = normalizeReportType(String(case_no || '').toUpperCase().startsWith('P') ? 'prod' : report_type || 'normal');
+        const reportType = normalizeReportType(report_type || (String(case_no || '').toUpperCase().startsWith('P') ? 'prod' : 'normal'));
         let finalCaseNo = (case_no || '').trim();
-        if (!finalCaseNo || finalCaseNo === '計算中...') {
-          finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
-          if (!finalCaseNo) {
-            return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
+        const isAutoCaseNo = !finalCaseNo || finalCaseNo.startsWith('\u8a08\u7b97\u4e2d') || isGeneratedCaseNo(finalCaseNo, reportType, test_date);
+
+        if (!isAutoCaseNo) {
+          const exists = await env.DB.prepare('SELECT id FROM reports WHERE case_no = ? LIMIT 1').bind(finalCaseNo).first();
+          if (exists) {
+            finalCaseNo = '';
           }
+        } else {
+          finalCaseNo = '';
         }
 
         let result;
         for (let attempt = 0; attempt < 4; attempt++) {
+          if (!finalCaseNo) {
+            finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
+            if (!finalCaseNo) {
+              return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
+            }
+          }
           try {
             result = await env.DB.prepare(
               "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now', '+8 hours'))"
@@ -459,10 +482,7 @@ export default {
             if (!isDuplicateCaseNoError(err)) {
               throw err;
             }
-            finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
-            if (!finalCaseNo) {
-              return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
-            }
+            finalCaseNo = '';
           }
         }
 
@@ -470,7 +490,7 @@ export default {
           return new Response(JSON.stringify({ error: 'Unable to create report after retries' }), { status: 500, headers: corsHeaders });
         }
 
-        return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id }), {
+        return new Response(JSON.stringify({ success: true, id: result.meta.last_row_id, case_no: finalCaseNo }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
