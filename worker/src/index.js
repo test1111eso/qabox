@@ -67,6 +67,11 @@ async function ensureCaseNoUniqueIndex(env) {
     await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_case_no ON reports(case_no)').run();
     nextCaseNoGuard.initialized = true;
   } catch (e) {
+    if (isDuplicateCaseNoError(e)) {
+      console.warn('ensureCaseNoUniqueIndex skipped because duplicate case_no already exists in DB');
+      nextCaseNoGuard.initialized = true;
+      return;
+    }
     console.error('ensureCaseNoUniqueIndex', e);
     throw e;
   }
@@ -97,21 +102,43 @@ async function allocateNextCaseNo(env, dateStr, reportType, attemptOffset = 0) {
   const prefix = type === 'prod' ? 'P' : 'T';
   const counterKey = `case_no_seq:${prefix}:${datePrefix}`;
   const seqCounterValue = await getMaxCaseSeqByType(env, datePrefix, type);
-  const targetBaseSeq = (Number.isFinite(seqCounterValue) ? seqCounterValue : 0) + 1;
-  const targetNextSeq = targetBaseSeq + attemptOffset;
-  const reserveStmt = `
+  const seedSeq = Number.isFinite(seqCounterValue) ? seqCounterValue : 0;
+
+  const seedStmt = `
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET
       value = CASE
-        WHEN CAST(value AS INTEGER) < CAST(excluded.value AS INTEGER) THEN CAST(excluded.value AS INTEGER)
-        ELSE CAST(value AS INTEGER) + 1
+        WHEN CAST(COALESCE(value, '0') AS INTEGER) < CAST(excluded.value AS INTEGER) THEN CAST(excluded.value AS INTEGER)
+        ELSE CAST(COALESCE(value, '0') AS INTEGER)
       END
   `;
 
-  await env.DB.prepare(reserveStmt).bind(counterKey, String(targetNextSeq)).run();
-  const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
-  const nextSeq = parseInt(nextSeqRow?.value, 10) || 0;
-  return `${prefix}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
+  await env.DB.prepare(seedStmt).bind(counterKey, String(seedSeq)).run();
+
+  const skipCount = Number.isFinite(attemptOffset) && attemptOffset > 0 ? Math.floor(attemptOffset) : 0;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    await env.DB.prepare(
+      'UPDATE settings SET value = CAST(COALESCE(value, 0) AS INTEGER) + 1 WHERE key = ?'
+    ).bind(counterKey).run();
+
+    const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
+    const nextSeq = parseInt(nextSeqRow?.value, 10);
+    if (!Number.isFinite(nextSeq)) {
+      return '';
+    }
+
+    if (attempt + 1 <= skipCount) {
+      continue;
+    }
+
+    const candidateNo = `${prefix}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
+    const exists = await env.DB.prepare('SELECT id FROM reports WHERE case_no = ? LIMIT 1').bind(candidateNo).first();
+    if (!exists) {
+      return candidateNo;
+    }
+  }
+
+  return '';
 }
 
 async function ensureOwnerUserIdColumn(env) {
