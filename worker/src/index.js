@@ -89,7 +89,7 @@ async function getMaxCaseSeqByType(env, datePrefix, reportType) {
   return maxSeq;
 }
 
-async function allocateNextCaseNo(env, dateStr, reportType) {
+async function allocateNextCaseNo(env, dateStr, reportType, attemptOffset = 0) {
   const datePrefix = String(dateStr || '').replace(/-/g, '');
   if (!datePrefix) return '';
 
@@ -97,7 +97,8 @@ async function allocateNextCaseNo(env, dateStr, reportType) {
   const prefix = type === 'prod' ? 'P' : 'T';
   const counterKey = `case_no_seq:${prefix}:${datePrefix}`;
   const seqCounterValue = await getMaxCaseSeqByType(env, datePrefix, type);
-  const targetNextSeq = (Number.isFinite(seqCounterValue) ? seqCounterValue : 0) + 1;
+  const targetBaseSeq = (Number.isFinite(seqCounterValue) ? seqCounterValue : 0) + 1;
+  const targetNextSeq = targetBaseSeq + attemptOffset;
   const reserveStmt = `
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET
@@ -107,19 +108,10 @@ async function allocateNextCaseNo(env, dateStr, reportType) {
       END
   `;
 
-  for (let attempt = 0; attempt < 5; attempt++) {
-    await env.DB.prepare(reserveStmt).bind(counterKey, String(targetNextSeq)).run();
-
-    const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
-    const nextSeq = parseInt(nextSeqRow?.value, 10) || 0;
-    const nextCaseNo = `${prefix}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
-    const duplicated = await env.DB.prepare('SELECT id FROM reports WHERE case_no = ? LIMIT 1').bind(nextCaseNo).first();
-    if (!duplicated) {
-      return nextCaseNo;
-    }
-  }
-
-  return '';
+  await env.DB.prepare(reserveStmt).bind(counterKey, String(targetNextSeq)).run();
+  const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
+  const nextSeq = parseInt(nextSeqRow?.value, 10) || 0;
+  return `${prefix}${datePrefix}-${nextSeq.toString().padStart(2, '0')}`;
 }
 
 async function ensureOwnerUserIdColumn(env) {
@@ -436,16 +428,12 @@ export default {
         let finalCaseNo = '';
 
         let result;
-        for (let attempt = 0; attempt < 4; attempt++) {
-          finalCaseNo = await allocateNextCaseNo(env, test_date, reportType);
+        for (let attempt = 0; attempt < 8; attempt++) {
+          finalCaseNo = await allocateNextCaseNo(env, test_date, reportType, attempt);
           if (!finalCaseNo) {
             return new Response(JSON.stringify({ error: 'Unable to allocate case number' }), { status: 500, headers: corsHeaders });
           }
 
-          const exists = await env.DB.prepare('SELECT id FROM reports WHERE case_no = ? LIMIT 1').bind(finalCaseNo).first();
-          if (exists) {
-            continue;
-          }
           try {
             result = await env.DB.prepare(
               "INSERT INTO reports (case_no, project_name, tester_name, test_date, status, bug_link, notes, category, raw_ticket, is_pinned, owner_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, datetime('now', '+8 hours'))"
