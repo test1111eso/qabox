@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_case_no ON reports(case_no);
+
 
 
 CREATE TABLE IF NOT EXISTS users (

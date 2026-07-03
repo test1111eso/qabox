@@ -1655,11 +1655,12 @@ async function submitReport(e) {
         
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || (isEditMode ? '修改失敗' : '新增失敗'));
-        const finalCaseNo = isEditMode ? payload.case_no : String((data?.case_no || '').trim());
-        if (!isEditMode && !finalCaseNo) {
-            throw new Error('新增失敗：未能取得最終案件編號');
+        const responseCaseNo = String((data?.case_no || '').trim());
+        const finalCaseNo = isEditMode ? payload.case_no : (responseCaseNo || payload.case_no || '').trim();
+        if (!isEditMode && !responseCaseNo) {
+            showToast('新增成功，但未取得後端回傳的最終單號，已先保留目前顯示的單號', true);
         }
-        if (!isEditMode && finalCaseNo && finalCaseNo !== payload.case_no) {
+        if (!isEditMode && responseCaseNo && responseCaseNo !== payload.case_no) {
             showToast(`案件編號已被其他人先用，已自動調整為 ${finalCaseNo}`, true);
             flashCaseNoConflict(finalCaseNo);
         }

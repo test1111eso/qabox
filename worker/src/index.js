@@ -97,26 +97,18 @@ async function allocateNextCaseNo(env, dateStr, reportType) {
   const prefix = type === 'prod' ? 'P' : 'T';
   const counterKey = `case_no_seq:${prefix}:${datePrefix}`;
   const seqCounterValue = await getMaxCaseSeqByType(env, datePrefix, type);
+  const targetNextSeq = (Number.isFinite(seqCounterValue) ? seqCounterValue : 0) + 1;
+  const reserveStmt = `
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = CASE
+        WHEN CAST(value AS INTEGER) < CAST(excluded.value AS INTEGER) THEN CAST(excluded.value AS INTEGER)
+        ELSE CAST(value AS INTEGER) + 1
+      END
+  `;
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const exists = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
-    if (!exists) {
-      try {
-        await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').bind(counterKey, String(seqCounterValue)).run();
-      } catch (err) {
-        // another request may have initialized it first; continue
-      }
-    } else {
-      const current = parseInt(exists.value, 10);
-      if (!Number.isFinite(current) || current < seqCounterValue) {
-        await env.DB.prepare('UPDATE settings SET value = ? WHERE key = ?').bind(String(seqCounterValue), counterKey).run();
-      }
-    }
-
-    const updateResult = await env.DB.prepare('UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = ?').bind(counterKey).run();
-    if (!updateResult?.meta || updateResult.meta.changes === 0) {
-      continue;
-    }
+    await env.DB.prepare(reserveStmt).bind(counterKey, String(targetNextSeq)).run();
 
     const nextSeqRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(counterKey).first();
     const nextSeq = parseInt(nextSeqRow?.value, 10) || 0;
