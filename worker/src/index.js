@@ -1,4 +1,4 @@
-const corsHeaders = {
+﻿const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -347,6 +347,7 @@ export default {
         const date = url.searchParams.get('date');
         const start_date = url.searchParams.get('start_date');
         const end_date = url.searchParams.get('end_date');
+        const caseNo = url.searchParams.get('case_no');
         const statusParam = url.searchParams.get('status');
         
         let query = 'SELECT * FROM reports WHERE is_deleted = 0';
@@ -389,6 +390,13 @@ export default {
             query += ' AND test_date <= ?';
             params.push(end_date);
           }
+        }
+        if (caseNo && caseNo.trim()) {
+          const caseNoKeyword = caseNo.trim();
+          const normalizedCaseNoKeyword = caseNoKeyword.toUpperCase();
+          const shouldMatchPrefix = /^[pt]\d{8}$/i.test(caseNoKeyword);
+          query += ' AND case_no LIKE ? COLLATE NOCASE';
+          params.push(shouldMatchPrefix ? `${normalizedCaseNoKeyword}-%` : `%${normalizedCaseNoKeyword}%`);
         }
         
         query += ' ORDER BY is_pinned DESC, test_date DESC, created_at DESC LIMIT ' +

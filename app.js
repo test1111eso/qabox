@@ -1,4 +1,4 @@
-// Cloudflare Worker API URL
+﻿// Cloudflare Worker API URL
 const API_BASE = 'https://qagame.test1111-tcm-tc.workers.dev';
 
 let dailyChartInstance = null;
@@ -260,6 +260,7 @@ function checkAuth() {
         
         document.getElementById('filter-start-date').value = twToday;
         document.getElementById('filter-end-date').value = twToday;
+        syncReportDateRangeButtonLabel();
         
         const testerStart = document.getElementById('tester-start-date');
         const testerEnd = document.getElementById('tester-end-date');
@@ -1310,12 +1311,21 @@ function renderTesterStats() {
 
 
 async function fetchReports() {
-    const start_date = document.getElementById('filter-start-date').value;
-    const end_date = document.getElementById('filter-end-date').value;
+    const rawCaseNo = (document.getElementById('filter-case-no')?.value || '').trim();
+    const caseNo = rawCaseNo.toUpperCase();
+    const isCaseDatePrefixSearch = /^[PT]\d{8}$/i.test(rawCaseNo.trim());
+    const start_date = isCaseDatePrefixSearch ? '' : document.getElementById('filter-start-date').value;
+    const end_date = isCaseDatePrefixSearch ? '' : document.getElementById('filter-end-date').value;
+
+    if (start_date && end_date && start_date > end_date) {
+        showToast('Start date cannot be greater than end date', true);
+        return;
+    }
     
     let url = `${API_BASE}/api/reports?`;
     if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
     if (end_date) url += `end_date=${encodeURIComponent(end_date)}&`;
+    if (caseNo) url += `case_no=${encodeURIComponent(caseNo)}&`;
 
     console.log('[DEBUG] fetchReports URL:', url);
 
@@ -1340,12 +1350,70 @@ async function fetchReports() {
     }
 }
 
+function syncReportDateRangeButtonLabel() {
+    const startDate = document.getElementById('filter-start-date')?.value || '';
+    const endDate = document.getElementById('filter-end-date')?.value || '';
+    const btnLabel = document.getElementById('report-date-range-btn-label') || document.getElementById('report-date-range-btn');
+    if (!btnLabel) return;
+
+    btnLabel.textContent = (startDate || endDate) ? '已選擇' : '未選擇';
+}
+
+function handleReportDateRangeInputChange() {
+    syncReportDateRangeButtonLabel();
+    fetchReports();
+}
+
+function hideReportDateRangePanel() {
+    const panel = document.getElementById('report-date-range-panel');
+    if (panel) panel.classList.add('hidden');
+}
+
+function detachReportDateRangePanel() {
+    const panel = document.getElementById('report-date-range-panel');
+    if (panel && panel.parentElement !== document.body) {
+        document.body.appendChild(panel);
+    }
+}
+
+function positionReportDateRangePanel() {
+    const btn = document.getElementById('report-date-range-btn');
+    const panel = document.getElementById('report-date-range-panel');
+    if (!btn || !panel) return;
+
+    const rect = btn.getBoundingClientRect();
+    const panelWidth = panel.offsetWidth || 320;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+    const top = rect.bottom + 5;
+
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+}
+
+function toggleReportDateRangePanel(e) {
+    if (e && e.stopPropagation) {
+        e.stopPropagation();
+    }
+    const panel = document.getElementById('report-date-range-panel');
+    if (!panel) return;
+
+    if (panel.classList.contains('hidden')) {
+        detachReportDateRangePanel();
+        panel.classList.remove('hidden');
+        positionReportDateRangePanel();
+        const startInput = document.getElementById('filter-start-date');
+        if (startInput) startInput.focus();
+    } else {
+        hideReportDateRangePanel();
+    }
+}
+
 function clearFilters() {
-    const twToday = getTaiwanToday();
-    const twFirstDay = getTaiwanFirstDay();
-    
-    document.getElementById('filter-start-date').value = twFirstDay;
-    document.getElementById('filter-end-date').value = twToday;
+    document.getElementById('filter-start-date').value = '';
+    document.getElementById('filter-end-date').value = '';
+    const filterCaseNo = document.getElementById('filter-case-no');
+    if (filterCaseNo) filterCaseNo.value = '';
+    syncReportDateRangeButtonLabel();
     
     document.getElementById('filter-tester').value = 'all';
     
@@ -1359,6 +1427,9 @@ function setReportsToday() {
     const twToday = getTaiwanToday();
     document.getElementById('filter-start-date').value = twToday;
     document.getElementById('filter-end-date').value = twToday;
+    const filterCaseNo = document.getElementById('filter-case-no');
+    if (filterCaseNo) filterCaseNo.value = '';
+    syncReportDateRangeButtonLabel();
     fetchReports();
 }
 
@@ -4139,6 +4210,14 @@ function renderReportsTable() {
             return baseName === testerVal;
         });
     }
+
+    const filterCaseNo = document.getElementById('filter-case-no');
+    if (filterCaseNo && filterCaseNo.value) {
+        const query = filterCaseNo.value.trim().toLowerCase();
+        if (query) {
+            filteredData = filteredData.filter(r => (r.case_no || '').toLowerCase().includes(query));
+        }
+    }
     
     // search input
     const searchInput = document.getElementById('search-input');
@@ -4324,12 +4403,29 @@ function toggleTesterDropdown(e) {
     }
 }
 
-// Close dropdown when clicking outside
 document.addEventListener('click', function(e) {
     const btn = document.getElementById('tester-dropdown-btn');
     const menu = document.getElementById('tester-dropdown-menu');
     if (btn && menu && !btn.contains(e.target) && !menu.contains(e.target)) {
         menu.classList.add('hidden');
+    }
+
+    const reportDateRangeWrapper = document.getElementById('report-date-range-wrapper');
+    const reportDateRangePanel = document.getElementById('report-date-range-panel');
+    if (
+        reportDateRangeWrapper &&
+        reportDateRangePanel &&
+        !reportDateRangePanel.classList.contains('hidden') &&
+        !reportDateRangeWrapper.contains(e.target) &&
+        !reportDateRangePanel.contains(e.target)
+    ) {
+        hideReportDateRangePanel();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideReportDateRangePanel();
     }
 });
 
