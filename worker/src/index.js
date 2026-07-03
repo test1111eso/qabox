@@ -65,10 +65,10 @@ async function ensureCaseNoUniqueIndex(env) {
   if (nextCaseNoGuard.initialized) return;
   try {
     await env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_case_no ON reports(case_no)').run();
+    nextCaseNoGuard.initialized = true;
   } catch (e) {
     console.error('ensureCaseNoUniqueIndex', e);
-  } finally {
-    nextCaseNoGuard.initialized = true;
+    throw e;
   }
 }
 

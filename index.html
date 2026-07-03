@@ -1028,8 +1028,8 @@
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">測試日期 <span
                                             class="text-red-500">*</span></label>
-                                    <input type="date" id="form-date" required
-                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
+                                    <input type="date" id="form-date" required onchange="updateNextCaseNo(this.value)"
+                                         class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary">
                                 </div>
                             </div>
 
@@ -1360,7 +1360,7 @@
         <div id="toast"
             class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-20 opacity-0 z-50">
             <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg id="toast-icon" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                 </svg>
                 <span id="toast-message">操作成功</span>

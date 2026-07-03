@@ -781,33 +781,59 @@ function fallbackNextCaseNo(dateStr) {
 }
 
 // 非同步從後端取得最新延續案件編號，並填入唯讀的案件編號欄位中
+let caseNoAllocationRequestId = 0;
+let caseNoConflictResetTimer = null;
+
+function flashCaseNoConflict(newCaseNo) {
+    const caseNoEl = document.getElementById('form-case-no');
+    if (!caseNoEl) return;
+
+    caseNoEl.value = newCaseNo || caseNoEl.value;
+    caseNoEl.classList.remove('bg-gray-100', 'text-gray-500', 'border-gray-300', 'focus:border-primary');
+    caseNoEl.classList.add('bg-red-50', 'text-red-700', 'border-red-500');
+    caseNoEl.classList.add('ring-2', 'ring-red-300', 'focus:ring-red-300');
+
+    if (caseNoConflictResetTimer) {
+        clearTimeout(caseNoConflictResetTimer);
+    }
+    caseNoConflictResetTimer = setTimeout(() => {
+        caseNoEl.classList.remove('bg-red-50', 'text-red-700', 'border-red-500', 'ring-2', 'ring-red-300');
+        caseNoEl.classList.add('bg-gray-100', 'text-gray-500', 'border-gray-300');
+    }, 1800);
+}
+
 async function updateNextCaseNo(dateStr) {
     const caseNoEl = document.getElementById('form-case-no');
     if (!caseNoEl) return;
-    
+
     if (!dateStr) {
         caseNoEl.value = '';
         updateGeneratedResult();
         return;
     }
-    
+
     caseNoEl.value = '計算中...';
     updateGeneratedResult();
-    
+    const requestId = ++caseNoAllocationRequestId;
+
     try {
         const res = await fetch(
             `${API_BASE}/api/reports/next-case-no?date=${encodeURIComponent(dateStr)}&type=${currentReportMode}&_ts=${Date.now()}`,
             { cache: 'no-store' }
         );
-        if (!res.ok) throw new Error('API 回傳異常');
+        if (!res.ok) throw new Error('API 請求失敗');
         const data = await res.json();
-        
-        caseNoEl.value = data.nextCaseNo || '';
+        if (requestId !== caseNoAllocationRequestId) return;
+        const nextCaseNo = (data?.nextCaseNo || '').trim();
+        if (!nextCaseNo) throw new Error('無法取得新案件編號');
+
+        caseNoEl.value = nextCaseNo;
         updateGeneratedResult();
     } catch (err) {
         console.error(err);
-        // 若 API 發生故障，退回至備用方案，避免用戶無法送出報告
-        caseNoEl.value = fallbackNextCaseNo(dateStr);
+        if (requestId !== caseNoAllocationRequestId) return;
+        caseNoEl.value = '';
+        showToast('無法取得新案件編號，請稍後重試', true);
         updateGeneratedResult();
     }
 }
@@ -859,12 +885,21 @@ function clearGeneratorForm() {
 function showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     const msgEl = document.getElementById('toast-message');
+    const iconEl = document.getElementById('toast-icon');
     msgEl.textContent = message;
     
     if (isError) {
         toast.classList.replace('bg-gray-800', 'bg-red-600');
+        if (iconEl) {
+            iconEl.classList.remove('text-green-400');
+            iconEl.classList.add('text-red-200');
+        }
     } else {
         toast.classList.replace('bg-red-600', 'bg-gray-800');
+        if (iconEl) {
+            iconEl.classList.remove('text-red-200');
+            iconEl.classList.add('text-green-400');
+        }
     }
 
     toast.classList.remove('translate-y-20', 'opacity-0');
@@ -1620,12 +1655,21 @@ async function submitReport(e) {
         
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || (isEditMode ? '修改失敗' : '新增失敗'));
+        const finalCaseNo = isEditMode ? payload.case_no : String((data?.case_no || '').trim());
+        if (!isEditMode && !finalCaseNo) {
+            throw new Error('新增失敗：未能取得最終案件編號');
+        }
+        if (!isEditMode && finalCaseNo && finalCaseNo !== payload.case_no) {
+            showToast(`案件編號已被其他人先用，已自動調整為 ${finalCaseNo}`, true);
+            flashCaseNoConflict(finalCaseNo);
+        }
+
         
         const savedId = isEditMode ? parseInt(reportId, 10) : data.id;
         const existingReport = isEditMode ? currentReportsList.find(r => r.id === savedId) : null;
         upsertReportInCache({
             id: savedId,
-            case_no: isEditMode ? payload.case_no : (data.case_no || payload.case_no),
+            case_no: finalCaseNo,
             project_name: payload.project_name,
             tester_name: payload.tester_name,
             test_date: payload.test_date,
