@@ -3,37 +3,21 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main   # 推送到 main 分支時自動部署
-  workflow_dispatch:  # 允許手動從 Actions 頁面觸發
+      - main
+  workflow_dispatch:
 
-# 設定 GITHUB_TOKEN 的權限以允許部署到 GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# 同一時間只允許一個部署，但不取消進行中的部署
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Stamp build version
-        run: |
-          VERSION="$(date -u +%Y%m%d_%H%M)_$(git rev-parse --short HEAD)"
-          sed -i "s/name=\"app-version\" content=\"[^\"]*\"/name=\"app-version\" content=\"${VERSION}\"/" index.html
-          sed -i "s/app.js?v=[^\"]*\"/app.js?v=${VERSION}\"/" index.html
-          sed -i "s/style.css?v=[^\"]*\"/style.css?v=${VERSION}\"/" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -41,9 +25,11 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # 只上傳根目錄下的靜態檔案 (排除 worker/ 後端程式碼)
-          path: '.'
+          path: .
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
