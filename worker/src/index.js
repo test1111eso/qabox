@@ -1112,7 +1112,12 @@ export default {
 
       return new Response('Not Found', { status: 404, headers: corsHeaders });
     } catch (err) {
-      return new Response(err.message, { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({
+        error: err?.message || '伺服器發生錯誤'
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
   },
 };
