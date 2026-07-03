@@ -72,6 +72,10 @@
     width: 100%;
 }
 
+.compact-report-table thead th {
+    background-color: #f3f4f6;
+}
+
 .compact-report-table td {
     overflow: hidden;
 }
@@ -79,6 +83,15 @@
 .compact-report-table .status-col,
 .compact-report-table .type-col {
     overflow: visible;
+}
+
+#reports-table .admin-only {
+    background-color: #f3f4f6;
+}
+
+#reports-table .admin-only.hidden {
+    display: table-cell !important;
+    visibility: hidden;
 }
 
 .compact-report-table .project-name-col {

@@ -4230,6 +4230,8 @@ function renderReportsTable() {
         });
     }
 
+    const currentUserRole = localStorage.getItem('qa_role') || 'user';
+
     if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
         document.getElementById('reports-pagination').innerHTML = '';
@@ -4239,13 +4241,6 @@ function renderReportsTable() {
     const startIndex = (reportsCurrentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     const paginatedData = filteredData.slice(startIndex, endIndex);
-
-    const currentUserRole = localStorage.getItem('qa_role') || 'user';
-    const adminCols = document.querySelectorAll('.admin-only');
-    adminCols.forEach(col => {
-        if (currentUserRole === 'admin') col.classList.remove('hidden');
-        else col.classList.add('hidden');
-    });
 
     paginatedData.forEach(report => {
         const tr = document.createElement('tr');
