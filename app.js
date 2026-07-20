@@ -4231,6 +4231,10 @@ function renderReportsTable() {
     }
 
     const currentUserRole = localStorage.getItem('qa_role') || 'user';
+    const totalReportPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
+    if (reportsCurrentPage < 1 || reportsCurrentPage > totalReportPages) {
+        reportsCurrentPage = 1;
+    }
 
     if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">找不到測試報告</td></tr>';
