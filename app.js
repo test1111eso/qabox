@@ -3179,16 +3179,7 @@ function handleBypassOptionChange() {
         return;
     }
 
-    const chkOther = document.getElementById('bypass-chk-other');
-    const otherContainer = document.getElementById('bypass-other-container');
-    const otherInput = document.getElementById('bypass-other-input');
     const docLinkContainer = document.getElementById('bypass-doc-link-container');
-    
-    const isOtherChecked = chkOther ? chkOther.checked : false;
-    if (otherContainer) {
-        otherContainer.classList.toggle('hidden', !isOtherChecked);
-    }
-    
     const checkedBoxes = Array.from(document.querySelectorAll('input[name="bypass_reason"]:checked'));
     if (docLinkContainer) {
         docLinkContainer.classList.toggle('hidden', checkedBoxes.length === 0);
@@ -3200,14 +3191,7 @@ function handleBypassOptionChange() {
         return;
     }
 
-    const reasons = checkedBoxes.map(chk => {
-        if (chk.value === '6.其他') {
-            const otherVal = (otherInput ? otherInput.value.trim() : '');
-            return otherVal ? `6.其他 (${otherVal})` : `6.其他`;
-        }
-        return chk.value;
-    });
-
+    const reasons = checkedBoxes.map(chk => chk.value);
     let bypassText = `BY PASS\n原因：\n` + reasons.map(r => `- ${r}`).join('\n') + `\nQA 內部作業程序與協作說明書`;
     setTicketNotes(bypassText);
 }
@@ -3222,10 +3206,6 @@ function clearBypassCheckboxes() {
     if (clearBtn) clearBtn.classList.add('hidden');
 
     document.querySelectorAll('input[name="bypass_reason"]').forEach(r => r.checked = false);
-    const otherInput = document.getElementById('bypass-other-input');
-    if (otherInput) otherInput.value = '';
-    const otherContainer = document.getElementById('bypass-other-container');
-    if (otherContainer) otherContainer.classList.add('hidden');
     const docLinkContainer = document.getElementById('bypass-doc-link-container');
     if (docLinkContainer) docLinkContainer.classList.add('hidden');
 }
@@ -3238,9 +3218,6 @@ function syncBypassOptionsFromSteps() {
     const mainToggle = document.getElementById('bypass-main-toggle');
     const optionsWrapper = document.getElementById('bypass-options-wrapper');
     const clearBtn = document.getElementById('bypass-clear-btn');
-    const chkOther = document.getElementById('bypass-chk-other');
-    const otherContainer = document.getElementById('bypass-other-container');
-    const otherInput = document.getElementById('bypass-other-input');
     const docLinkContainer = document.getElementById('bypass-doc-link-container');
 
     const checkboxes = document.querySelectorAll('input[name="bypass_reason"]');
@@ -3248,24 +3225,10 @@ function syncBypassOptionsFromSteps() {
 
     checkboxes.forEach(chk => {
         let isMatch = false;
-        if (chk.value === '1.改動非常微小、不影響核心功能') {
-            isMatch = text.includes('1.改動非常微小') || text.includes('1. 改動非常微小') || text.includes('不影響核心功能');
-        } else if (chk.value === '2.影響範圍很單一、例行性工作') {
-            isMatch = text.includes('2.影響範圍很單一') || text.includes('2. 影響範圍很單一') || text.includes('例行性工作');
-        } else if (chk.value === '3.效能優化') {
-            isMatch = text.includes('3.效能優化') || text.includes('3. 效能優化');
-        } else if (chk.value === '4.緊急發生的突發修復（隕石單）') {
-            isMatch = text.includes('4.緊急發生的突發修復') || text.includes('4. 緊急發生的突發修復') || text.includes('隕石單');
-        } else if (chk.value === '5.已核准的 Bug 複驗（ByPass）') {
-            isMatch = text.includes('5.已核准的 Bug 複驗') || text.includes('5. 已核准的 Bug 複驗');
-        } else if (chk.value === '6.其他') {
-            isMatch = text.includes('6.其他') || text.includes('6. 其他');
-            if (isMatch) {
-                const match = text.match(/6\.\s*其他(?:\s*[\(（:：]\s*([^\)\n]+)[\)）]?)?/i);
-                if (match && match[1] && otherInput) {
-                    otherInput.value = match[1].trim();
-                }
-            }
+        if (chk.value.includes('基於內部文件')) {
+            isMatch = text.includes('1.本單需求基於內部文件') || text.includes('1. 本單需求基於內部文件') || text.includes('基於內部文件');
+        } else if (chk.value.includes('UI調整')) {
+            isMatch = text.includes('2.本單需求為UI調整') || text.includes('2. 本單需求為UI調整') || text.includes('本單需求為UI調整') || text.includes('UI調整');
         }
 
         chk.checked = isMatch;
@@ -3277,9 +3240,6 @@ function syncBypassOptionsFromSteps() {
     if (optionsWrapper) optionsWrapper.classList.toggle('hidden', !isBypassPresent);
     if (clearBtn) clearBtn.classList.toggle('hidden', !isBypassPresent);
 
-    if (otherContainer) {
-        otherContainer.classList.toggle('hidden', !(chkOther && chkOther.checked));
-    }
     if (docLinkContainer) {
         docLinkContainer.classList.toggle('hidden', !anyChecked && !text.includes('QA 內部作業程序與協作說明書'));
     }

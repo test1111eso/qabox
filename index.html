@@ -1271,36 +1271,15 @@
 
                                     <div id="bypass-options-wrapper" class="hidden mt-3 pt-3 border-t border-slate-200">
                                         <div class="text-xs font-semibold text-slate-600 mb-2">請選擇 BY PASS 原因 <span class="text-slate-400 font-normal">(可複選)</span>：</div>
-                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" id="bypass-options-container">
+                                        <div class="flex flex-col gap-2 text-xs" id="bypass-options-container">
                                             <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="1.改動非常微小、不影響核心功能" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>1. 改動非常微小、不影響核心功能</span>
+                                                <input type="checkbox" name="bypass_reason" value="1.本單需求基於內部文件(QA 內部作業程序與協作說明書)，不出案例" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>1. 本單需求基於內部文件(QA 內部作業程序與協作說明書)，不出案例</span>
                                             </label>
                                             <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="2.影響範圍很單一、例行性工作" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>2. 影響範圍很單一、例行性工作</span>
+                                                <input type="checkbox" name="bypass_reason" value="2.本單需求為UI調整，符合內部文件規範，不出案例" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>2. 本單需求為UI調整，符合內部文件規範，不出案例</span>
                                             </label>
-                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="3.效能優化" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>3. 效能優化</span>
-                                            </label>
-                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="4.緊急發生的突發修復（隕石單）" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>4. 緊急發生的突發修復（隕石單）</span>
-                                            </label>
-                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="5.已核准的 Bug 複驗（ByPass）" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>5. 已核准的 Bug 複驗（ByPass）</span>
-                                            </label>
-                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
-                                                <input type="checkbox" name="bypass_reason" value="6.其他" id="bypass-chk-other" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
-                                                <span>6. 其他</span>
-                                            </label>
-                                        </div>
-
-                                        <div id="bypass-other-container" class="hidden mt-2.5 pt-2 border-t border-slate-200">
-                                            <label class="block text-xs font-medium text-slate-700 mb-1">其他補充說明：</label>
-                                            <input type="text" id="bypass-other-input" placeholder="請輸入其他補充說明..." oninput="handleBypassOptionChange()" class="w-full border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-primary focus:border-primary bg-white">
                                         </div>
 
                                         <div id="bypass-doc-link-container" class="hidden mt-2.5 pt-2 border-t border-slate-200 text-xs text-blue-700 flex items-center gap-1.5">
