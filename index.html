@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 
 <head>
@@ -1247,7 +1247,7 @@
                                 <label class="block text-sm font-bold text-green-800 mb-2 flex items-center gap-2">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
                                         </path>
                                     </svg>
                                     第三步：測試步驟
@@ -1256,7 +1256,74 @@
                                     class="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500 bg-white shadow-inner"></textarea>
                             </div>
 
+                            <div>
+                                <div class="mb-3 bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                    <div class="flex items-center justify-between">
+                                        <label class="flex items-center gap-2 cursor-pointer select-none font-bold text-slate-800 text-sm">
+                                            <input type="checkbox" id="bypass-main-toggle" onchange="handleBypassToggleChange()" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer">
+                                            <span class="flex items-center gap-1.5">
+                                                <span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                                                BY PASS
+                                            </span>
+                                        </label>
+                                        <button type="button" id="bypass-clear-btn" onclick="clearBypassCheckboxes()" class="hidden text-xs text-slate-400 hover:text-slate-600 font-medium">清空選取</button>
+                                    </div>
 
+                                    <div id="bypass-options-wrapper" class="hidden mt-3 pt-3 border-t border-slate-200">
+                                        <div class="text-xs font-semibold text-slate-600 mb-2">請選擇 BY PASS 原因 <span class="text-slate-400 font-normal">(可複選)</span>：</div>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" id="bypass-options-container">
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="1.改動非常微小、不影響核心功能" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>1. 改動非常微小、不影響核心功能</span>
+                                            </label>
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="2.影響範圍很單一、例行性工作" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>2. 影響範圍很單一、例行性工作</span>
+                                            </label>
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="3.效能優化" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>3. 效能優化</span>
+                                            </label>
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="4.緊急發生的突發修復（隕石單）" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>4. 緊急發生的突發修復（隕石單）</span>
+                                            </label>
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="5.已核准的 Bug 複驗（ByPass）" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>5. 已核准的 Bug 複驗（ByPass）</span>
+                                            </label>
+                                            <label class="flex items-start gap-1.5 p-1.5 rounded hover:bg-slate-100 cursor-pointer text-slate-700">
+                                                <input type="checkbox" name="bypass_reason" value="6.其他" id="bypass-chk-other" onchange="handleBypassOptionChange()" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                                <span>6. 其他</span>
+                                            </label>
+                                        </div>
+
+                                        <div id="bypass-other-container" class="hidden mt-2.5 pt-2 border-t border-slate-200">
+                                            <label class="block text-xs font-medium text-slate-700 mb-1">其他補充說明：</label>
+                                            <input type="text" id="bypass-other-input" placeholder="請輸入其他補充說明..." oninput="handleBypassOptionChange()" class="w-full border border-slate-300 rounded px-2.5 py-1 text-xs focus:ring-primary focus:border-primary bg-white">
+                                        </div>
+
+                                        <div id="bypass-doc-link-container" class="hidden mt-2.5 pt-2 border-t border-slate-200 text-xs text-blue-700 flex items-center gap-1.5">
+                                            <svg class="w-4 h-4 shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                            </svg>
+                                            <span>依規範須參照：</span>
+                                            <a href="https://docs.google.com/document/d/1yMUBr39HqPE-I2gVyY57YT9cPubu3K9HxJndfOEmLXw/edit?pli=1&tab=t.0" target="_blank" rel="noopener noreferrer" class="font-bold underline hover:text-blue-900 transition flex items-center gap-0.5">
+                                                QA 內部作業程序與協作說明書 ↗
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="block text-sm font-medium text-gray-700">備註 <span
+                                            class="text-xs font-normal text-gray-500">（工單帶入）</span></label>
+                                </div>
+                                <textarea id="form-steps" rows="3"
+                                    oninput="syncBypassOptionsFromSteps(); updateGeneratedResult();"
+                                    placeholder="貼上工單時自動帶入，或使用上方 BY PASS 選項"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
+                            </div>
 
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
@@ -1281,32 +1348,6 @@
                                 </div>
                             </div>
 
-                            <div>
-                                <div class="flex justify-between items-center mb-1">
-                                    <label class="block text-sm font-medium text-gray-700">備註 <span
-                                            class="text-xs font-normal text-gray-500">（工單帶入）</span></label>
-                                    <div class="flex gap-3">
-                                        <label
-                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                            <input type="radio" name="ticket-notes-preset" value="by pass"
-                                                onchange="setTicketNotes('by pass')"
-                                                class="text-primary focus:ring-primary">
-                                            by pass
-                                        </label>
-                                        <label
-                                            class="flex items-center gap-1 text-[12px] font-medium text-gray-600 cursor-pointer">
-                                            <input type="radio" name="ticket-notes-preset" value="調整樣式，不出案例"
-                                                onchange="setTicketNotes('調整樣式，不出案例')"
-                                                class="text-primary focus:ring-primary">
-                                            調整樣式，不出案例
-                                        </label>
-                                    </div>
-                                </div>
-                                <textarea id="form-steps" rows="3"
-                                    oninput="clearTicketNotesPresets(); updateGeneratedResult();"
-                                    placeholder="貼上工單時自動帶入，或使用上方 by pass / 調整樣式"
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-primary focus:border-primary"></textarea>
-                            </div>
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">狀態 <span

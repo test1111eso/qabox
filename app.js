@@ -1,4 +1,4 @@
-﻿// Cloudflare Worker API URL
+// Cloudflare Worker API URL
 const API_BASE = 'https://qagame.test1111-tcm-tc.workers.dev';
 
 let dailyChartInstance = null;
@@ -722,6 +722,7 @@ function openModal(mode = 'normal') {
     document.getElementById('form-report-id').value = '';
     document.getElementById('ticket-input').value = '';
     clearReportModalSideFields();
+    if (typeof clearBypassCheckboxes === 'function') clearBypassCheckboxes();
 
     document.getElementById('modal-title').textContent = '撰寫測試報告';
     document.getElementById('submit-text').textContent = '儲存報告';
@@ -845,6 +846,7 @@ function closeModal() {
     document.getElementById('ticket-input').value = '';
     document.getElementById('form-report-id').value = '';
     clearReportModalSideFields();
+    if (typeof clearBypassCheckboxes === 'function') clearBypassCheckboxes();
     userEditedFields.clear();
     document.getElementById('modal-title').textContent = '撰寫測試報告';
     document.getElementById('submit-text').textContent = '儲存報告';
@@ -855,6 +857,7 @@ function clearGeneratorForm() {
         document.getElementById('report-form').reset();
         document.getElementById('ticket-input').value = '';
         clearReportModalSideFields();
+        if (typeof clearBypassCheckboxes === 'function') clearBypassCheckboxes();
         const grafanaInput = document.getElementById('grafana-input');
         if (grafanaInput) grafanaInput.value = '';
         
@@ -1521,6 +1524,7 @@ function parseReportNotesToForm(text, rawTicket) {
             stepsEl.value = ticketRemarkMatch[1].trim();
         }
     }
+    if (typeof syncBypassOptionsFromSteps === 'function') syncBypassOptionsFromSteps();
 
     const testerNotes = extractField(/(?:測試員備註|QA備註)[^\S\r\n]*[：:][^\S\r\n]*([^\n]+)/i);
     if (testerNotes) document.getElementById('form-notes').value = testerNotes;
@@ -2751,10 +2755,10 @@ function renderRichPreview() {
 
         if (currentFieldIsEdited) {
             // 被手動修改過的行 (變動後)：套用琥珀橘高亮背景、橘色字與左側橘色粗邊線
-            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${escapeHtml(line)}</div>`);
+            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${formatLineWithDocLinks(line)}</div>`);
         } else {
             // 未被修改的行 (變動前)：普通黑色字
-            htmlLines.push(`<div class="px-2 py-0.5">${escapeHtml(line)}</div>`);
+            htmlLines.push(`<div class="px-2 py-0.5">${formatLineWithDocLinks(line)}</div>`);
         }
     }
 
@@ -2927,9 +2931,9 @@ function renderViewReportRichPreview(report) {
         }
 
         if (currentFieldIsEdited) {
-            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${escapeHtml(line)}</div>`);
+            htmlLines.push(`<div class="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded my-0.5 font-semibold transition-all border-l-4 border-amber-500">${formatLineWithDocLinks(line)}</div>`);
         } else {
-            htmlLines.push(`<div class="px-2 py-0.5">${escapeHtml(line)}</div>`);
+            htmlLines.push(`<div class="px-2 py-0.5">${formatLineWithDocLinks(line)}</div>`);
         }
     }
 
@@ -3125,9 +3129,160 @@ function setTicketNotes(val) {
     if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
 }
 
-function clearTicketNotesPresets() {
-    const radios = document.getElementsByName('ticket-notes-preset');
-    radios.forEach(r => r.checked = false);
+// ================= BY PASS Option Handling =================
+const QA_BYPASS_DOC_URL = 'https://docs.google.com/document/d/1yMUBr39HqPE-I2gVyY57YT9cPubu3K9HxJndfOEmLXw/edit?pli=1&tab=t.0';
+
+function formatLineWithDocLinks(line) {
+    let escaped = escapeHtml(line);
+    if (/QA\s*內部作業程序與協作說明書/i.test(escaped)) {
+        escaped = escaped.replace(
+            /QA\s*內部作業程序與協作說明書/gi,
+            `<a href="${QA_BYPASS_DOC_URL}" target="_blank" rel="noopener noreferrer" class="text-blue-600 font-bold underline hover:text-blue-800 transition" onclick="event.stopPropagation()">QA 內部作業程序與協作說明書 ↗</a>`
+        );
+    }
+    return escaped;
+}
+
+function handleBypassToggleChange() {
+    const mainToggle = document.getElementById('bypass-main-toggle');
+    const optionsWrapper = document.getElementById('bypass-options-wrapper');
+    const clearBtn = document.getElementById('bypass-clear-btn');
+    const isChecked = mainToggle ? mainToggle.checked : false;
+
+    if (optionsWrapper) optionsWrapper.classList.toggle('hidden', !isChecked);
+    if (clearBtn) clearBtn.classList.toggle('hidden', !isChecked);
+
+    if (!isChecked) {
+        document.querySelectorAll('input[name="bypass_reason"]').forEach(r => r.checked = false);
+        const otherInput = document.getElementById('bypass-other-input');
+        if (otherInput) otherInput.value = '';
+        const otherContainer = document.getElementById('bypass-other-container');
+        if (otherContainer) otherContainer.classList.add('hidden');
+        const docLinkContainer = document.getElementById('bypass-doc-link-container');
+        if (docLinkContainer) docLinkContainer.classList.add('hidden');
+
+        const stepsEl = document.getElementById('form-steps');
+        if (stepsEl && stepsEl.value.includes('BY PASS')) {
+            stepsEl.value = '';
+            userEditedFields.add('form-steps');
+            if (typeof syncTicketInputRemark === 'function') syncTicketInputRemark('');
+            if (typeof updateGeneratedResult === 'function') updateGeneratedResult();
+        }
+    } else {
+        handleBypassOptionChange();
+    }
+}
+
+function handleBypassOptionChange() {
+    const mainToggle = document.getElementById('bypass-main-toggle');
+    if (mainToggle && !mainToggle.checked) {
+        return;
+    }
+
+    const chkOther = document.getElementById('bypass-chk-other');
+    const otherContainer = document.getElementById('bypass-other-container');
+    const otherInput = document.getElementById('bypass-other-input');
+    const docLinkContainer = document.getElementById('bypass-doc-link-container');
+    
+    const isOtherChecked = chkOther ? chkOther.checked : false;
+    if (otherContainer) {
+        otherContainer.classList.toggle('hidden', !isOtherChecked);
+    }
+    
+    const checkedBoxes = Array.from(document.querySelectorAll('input[name="bypass_reason"]:checked'));
+    if (docLinkContainer) {
+        docLinkContainer.classList.toggle('hidden', checkedBoxes.length === 0);
+    }
+
+    if (checkedBoxes.length === 0) {
+        let bypassText = `BY PASS\nQA 內部作業程序與協作說明書`;
+        setTicketNotes(bypassText);
+        return;
+    }
+
+    const reasons = checkedBoxes.map(chk => {
+        if (chk.value === '6.其他') {
+            const otherVal = (otherInput ? otherInput.value.trim() : '');
+            return otherVal ? `6.其他 (${otherVal})` : `6.其他`;
+        }
+        return chk.value;
+    });
+
+    let bypassText = `BY PASS\n原因：\n` + reasons.map(r => `- ${r}`).join('\n') + `\nQA 內部作業程序與協作說明書`;
+    setTicketNotes(bypassText);
+}
+
+function clearBypassCheckboxes() {
+    const mainToggle = document.getElementById('bypass-main-toggle');
+    if (mainToggle) mainToggle.checked = false;
+
+    const optionsWrapper = document.getElementById('bypass-options-wrapper');
+    if (optionsWrapper) optionsWrapper.classList.add('hidden');
+    const clearBtn = document.getElementById('bypass-clear-btn');
+    if (clearBtn) clearBtn.classList.add('hidden');
+
+    document.querySelectorAll('input[name="bypass_reason"]').forEach(r => r.checked = false);
+    const otherInput = document.getElementById('bypass-other-input');
+    if (otherInput) otherInput.value = '';
+    const otherContainer = document.getElementById('bypass-other-container');
+    if (otherContainer) otherContainer.classList.add('hidden');
+    const docLinkContainer = document.getElementById('bypass-doc-link-container');
+    if (docLinkContainer) docLinkContainer.classList.add('hidden');
+}
+
+function syncBypassOptionsFromSteps() {
+    const stepsEl = document.getElementById('form-steps');
+    if (!stepsEl) return;
+    const text = stepsEl.value;
+
+    const mainToggle = document.getElementById('bypass-main-toggle');
+    const optionsWrapper = document.getElementById('bypass-options-wrapper');
+    const clearBtn = document.getElementById('bypass-clear-btn');
+    const chkOther = document.getElementById('bypass-chk-other');
+    const otherContainer = document.getElementById('bypass-other-container');
+    const otherInput = document.getElementById('bypass-other-input');
+    const docLinkContainer = document.getElementById('bypass-doc-link-container');
+
+    const checkboxes = document.querySelectorAll('input[name="bypass_reason"]');
+    let anyChecked = false;
+
+    checkboxes.forEach(chk => {
+        let isMatch = false;
+        if (chk.value === '1.改動非常微小、不影響核心功能') {
+            isMatch = text.includes('1.改動非常微小') || text.includes('1. 改動非常微小') || text.includes('不影響核心功能');
+        } else if (chk.value === '2.影響範圍很單一、例行性工作') {
+            isMatch = text.includes('2.影響範圍很單一') || text.includes('2. 影響範圍很單一') || text.includes('例行性工作');
+        } else if (chk.value === '3.效能優化') {
+            isMatch = text.includes('3.效能優化') || text.includes('3. 效能優化');
+        } else if (chk.value === '4.緊急發生的突發修復（隕石單）') {
+            isMatch = text.includes('4.緊急發生的突發修復') || text.includes('4. 緊急發生的突發修復') || text.includes('隕石單');
+        } else if (chk.value === '5.已核准的 Bug 複驗（ByPass）') {
+            isMatch = text.includes('5.已核准的 Bug 複驗') || text.includes('5. 已核准的 Bug 複驗');
+        } else if (chk.value === '6.其他') {
+            isMatch = text.includes('6.其他') || text.includes('6. 其他');
+            if (isMatch) {
+                const match = text.match(/6\.\s*其他(?:\s*[\(（:：]\s*([^\)\n]+)[\)）]?)?/i);
+                if (match && match[1] && otherInput) {
+                    otherInput.value = match[1].trim();
+                }
+            }
+        }
+
+        chk.checked = isMatch;
+        if (isMatch) anyChecked = true;
+    });
+
+    const isBypassPresent = text.includes('BY PASS') || text.includes('ByPass') || anyChecked;
+    if (mainToggle) mainToggle.checked = isBypassPresent;
+    if (optionsWrapper) optionsWrapper.classList.toggle('hidden', !isBypassPresent);
+    if (clearBtn) clearBtn.classList.toggle('hidden', !isBypassPresent);
+
+    if (otherContainer) {
+        otherContainer.classList.toggle('hidden', !(chkOther && chkOther.checked));
+    }
+    if (docLinkContainer) {
+        docLinkContainer.classList.toggle('hidden', !anyChecked && !text.includes('QA 內部作業程序與協作說明書'));
+    }
 }
 
 // ================= Browser Version Detection =================
