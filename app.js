@@ -1984,17 +1984,30 @@ function saveCollabData(type, data) {
 
 const GIT_RECENT_COMMITS = [
     {
+        hash: '20260923',
+        title: '優化BY PASS連結、代辦改Git紀錄、儀表板預設當月',
+        time: '2026/09/23 16:50',
+        summary: '支援 Discord 超連結、新增版本紀錄與儀表板預設當月區間',
+        details: [
+            '解決 Discord 貼上無連結問題：純文字自動帶出完整 Google 文件網址，貼到 Discord/LINE 直接點擊即可開啟',
+            '同步支援 Teams、Word、Docs 富文字超連結格式，保留文字超連結',
+            '移除協作中心無用的代辦事項，改為「近期 Git 修正紀錄」卡片',
+            '總覽儀表板篩選日期預設為本月區間（1 號 ~ 今日），「近 7 日測試趨勢」更名為「近期趨勢」'
+        ],
+        badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        dotColor: 'bg-emerald-500'
+    },
+    {
         hash: '658eea3',
         title: '更新BY PASS',
         time: '2026/08/11 18:30',
         summary: '優化 BY PASS 機制與文件超連結',
         details: [
             '勾選 BY PASS 時，備註自動帶出《QA 內部作業程序與協作說明書》網址',
-            '「複製內容」支援 Discord、LINE 純文字可點擊超連結，以及 Teams / Word 富文本超連結',
             '預覽區自動將完整網址收合成簡潔的「QA 內部作業程序與協作說明書 ↗」標籤'
         ],
-        badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-        dotColor: 'bg-emerald-500'
+        badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+        dotColor: 'bg-blue-500'
     },
     {
         hash: '4a2cef2',
@@ -2006,8 +2019,8 @@ const GIT_RECENT_COMMITS = [
             '勾選原因時，備註欄位自動格式化帶入條列項目',
             '若取消勾選 BY PASS 主開關，自動清空關聯原因與對應備註文字'
         ],
-        badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
-        dotColor: 'bg-blue-500'
+        badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        dotColor: 'bg-indigo-500'
     },
     {
         hash: 'cdbf3bd',
@@ -2019,8 +2032,8 @@ const GIT_RECENT_COMMITS = [
             '修復工單輸入與回報內容即時雙向同步時的字串逸出 (escapeHtml) 異常',
             '優化測試員下拉篩選與今日案件即時統計邏輯'
         ],
-        badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-        dotColor: 'bg-indigo-500'
+        badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+        dotColor: 'bg-purple-500'
     }
 ];
 
