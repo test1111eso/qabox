@@ -275,6 +275,13 @@ function checkAuth() {
             wsStart.value = twToday;
             wsEnd.value = twToday;
         }
+
+        const dashStart = document.getElementById('dash-filter-start');
+        const dashEnd = document.getElementById('dash-filter-end');
+        if (dashStart && dashEnd) {
+            dashStart.value = twFirstDay;
+            dashEnd.value = twToday;
+        }
         
         initFilterTesters();
         switchView('workspace');
@@ -522,6 +529,12 @@ function switchView(viewId) {
     if (viewId === 'workspace') loadWorkspace();
     if (viewId === 'dashboard') {
         dashboardIssueDismissed = false;
+        const dashStart = document.getElementById('dash-filter-start');
+        const dashEnd = document.getElementById('dash-filter-end');
+        if (dashStart && dashEnd && (!dashStart.value || !dashEnd.value)) {
+            dashStart.value = getTaiwanFirstDay();
+            dashEnd.value = getTaiwanToday();
+        }
         loadDashboard();
     }
     if (viewId === 'reports') fetchReports();
@@ -957,10 +970,24 @@ async function initFilterTesters() {
 
 // ================= API Calls =================
 
+function resetDashboardFilter() {
+    const startInput = document.getElementById('dash-filter-start');
+    const endInput = document.getElementById('dash-filter-end');
+    if (startInput) startInput.value = getTaiwanFirstDay();
+    if (endInput) endInput.value = getTaiwanToday();
+    loadDashboard();
+}
+
 async function loadDashboard() {
     try {
-        const start_date = document.getElementById('dash-filter-start')?.value || '';
-        const end_date = document.getElementById('dash-filter-end')?.value || '';
+        const startInput = document.getElementById('dash-filter-start');
+        const endInput = document.getElementById('dash-filter-end');
+        if (startInput && endInput && (!startInput.value || !endInput.value)) {
+            startInput.value = startInput.value || getTaiwanFirstDay();
+            endInput.value = endInput.value || getTaiwanToday();
+        }
+        const start_date = startInput?.value || '';
+        const end_date = endInput?.value || '';
         
         let url = `${API_BASE}/api/stats?`;
         if (start_date) url += `start_date=${encodeURIComponent(start_date)}&`;
@@ -1779,7 +1806,7 @@ async function submitReport(e) {
 // ================= Collaboration Board Logic =================
 function loadCollaborationBoard() {
     fetchBulletins();
-    renderCollabList('todo');
+    renderGitChangelog();
 }
 
 function updateCollabBellStatus(bulletins) {
@@ -1955,53 +1982,84 @@ function saveCollabData(type, data) {
     localStorage.setItem(`qa_${type}s`, JSON.stringify(data));
 }
 
+const GIT_RECENT_COMMITS = [
+    {
+        hash: '658eea3',
+        title: '更新BY PASS',
+        time: '2026/08/11 18:30',
+        summary: '優化 BY PASS 機制與文件超連結',
+        details: [
+            '勾選 BY PASS 時，備註自動帶出《QA 內部作業程序與協作說明書》網址',
+            '「複製內容」支援 Discord、LINE 純文字可點擊超連結，以及 Teams / Word 富文本超連結',
+            '預覽區自動將完整網址收合成簡潔的「QA 內部作業程序與協作說明書 ↗」標籤'
+        ],
+        badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        dotColor: 'bg-emerald-500'
+    },
+    {
+        hash: '4a2cef2',
+        title: 'BY PASS優化',
+        time: '2026/08/11 18:22',
+        summary: '新增 BY PASS 原因選項與自動帶入連動',
+        details: [
+            '新增「請選擇 BY PASS 原因」核取方塊群組（內部文件規範、UI調整不出案例）',
+            '勾選原因時，備註欄位自動格式化帶入條列項目',
+            '若取消勾選 BY PASS 主開關，自動清空關聯原因與對應備註文字'
+        ],
+        badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+        dotColor: 'bg-blue-500'
+    },
+    {
+        hash: 'cdbf3bd',
+        title: '修復qa',
+        time: '2026/07/21 19:33',
+        summary: '修復測試員權限與資料同步問題',
+        details: [
+            '修正一般測試人員不可修改或刪除他人測試報告的權限防護',
+            '修復工單輸入與回報內容即時雙向同步時的字串逸出 (escapeHtml) 異常',
+            '優化測試員下拉篩選與今日案件即時統計邏輯'
+        ],
+        badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        dotColor: 'bg-indigo-500'
+    }
+];
+
+function renderGitChangelog() {
+    const listEl = document.getElementById('git-changelog-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = GIT_RECENT_COMMITS.map((item, idx) => `
+        <div class="relative pl-6 pb-2 ${idx !== GIT_RECENT_COMMITS.length - 1 ? 'border-l-2 border-slate-200' : ''}">
+            <div class="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full ${item.dotColor} ring-4 ring-white"></div>
+            <div class="bg-slate-50/80 rounded-lg p-3.5 border border-slate-200/80 hover:border-slate-300 transition shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-gray-900 text-sm">${escapeHtml(item.title)}</span>
+                        <span class="font-mono text-[11px] px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200">${item.hash}</span>
+                    </div>
+                    <span class="text-xs text-slate-500 flex items-center gap-1 font-mono">
+                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        ${item.time}
+                    </span>
+                </div>
+                <div class="text-xs font-semibold text-slate-700 mb-1.5">${escapeHtml(item.summary)}</div>
+                <ul class="text-xs text-slate-600 space-y-1 list-disc list-inside bg-white rounded p-2.5 border border-slate-100">
+                    ${item.details.map(d => `<li class="leading-relaxed">${escapeHtml(d)}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+    `).join('');
+}
+
 function renderCollabList(type) {
     if (type === 'bulletin') {
         fetchBulletins();
         return;
     }
-    
-    const listEl = document.getElementById(`collab-${type}-list`);
-    if (!listEl) return;
-    const data = getCollabData(type);
-    listEl.innerHTML = '';
-
-    if (data.length === 0) {
-        listEl.innerHTML = '<div class="text-center text-sm text-gray-400 py-4">目前沒有項目</div>';
+    if (type === 'todo') {
+        renderGitChangelog();
         return;
     }
-
-    // 代辦事項專用邏輯
-    let sortedData = [...data];
-    sortedData.sort((a, b) => {
-        if (a.completed === b.completed) return b.timestamp - a.timestamp;
-        return a.completed ? 1 : -1;
-    });
-    
-    sortedData.forEach(item => {
-        const div = document.createElement('div');
-        div.className = `bg-white p-3 rounded shadow-sm border border-gray-100 relative group flex gap-3 items-start transition ${item.completed ? 'opacity-60 bg-gray-50' : ''}`;
-        
-        const timestampStr = new Date(item.timestamp).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-        
-        const checkedAttr = item.completed ? 'checked' : '';
-        const textClass = item.completed ? 'line-through text-gray-400' : 'text-gray-800';
-        const contentHtml = `
-            <input type="checkbox" ${checkedAttr} onchange="toggleCollabTodo('${item.id}')" class="mt-1 h-4 w-4 text-orange-500 rounded border-gray-300 focus:ring-orange-500 cursor-pointer">
-            <div class="flex-1">
-                <p class="text-sm font-medium ${textClass} break-all">${escapeHtml(item.text)}</p>
-                <p class="text-[10px] text-gray-400 mt-1">${escapeHtml(item.author)} · ${timestampStr}</p>
-            </div>
-        `;
-
-        div.innerHTML = `
-            ${contentHtml}
-            <button onclick="deleteCollabItem('${type}', '${item.id}')" class="text-gray-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100 flex-shrink-0">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-            </button>
-        `;
-        listEl.appendChild(div);
-    });
 }
 
 async function addCollabItem(type) {
@@ -2700,6 +2758,8 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
+const QA_BYPASS_DOC_URL = 'https://docs.google.com/document/d/1yMUBr39HqPE-I2gVyY57YT9cPubu3K9HxJndfOEmLXw/edit?pli=1&tab=t.0';
+
 function renderRichPreview() {
     const rawText = document.getElementById('generated-result')?.value || '';
     const previewDiv = document.getElementById('generated-result-preview');
@@ -3026,26 +3086,129 @@ function updateGeneratedResult() {
     renderRichPreview();
 }
 
-function copyGeneratedResult() {
+function formatReportContentToPlainText(rawText) {
+    if (!rawText) return '';
+    // 若純文字中未帶網址，自動補上網址，以利 Discord、LINE 等純文字軟體可直接點擊
+    return rawText.replace(
+        /(QA\s*內部作業程序與協作說明書)(?!\s*[:：]?\s*https?:\/\/)/gi,
+        `$1：${QA_BYPASS_DOC_URL}`
+    );
+}
+
+function formatReportContentToHtml(rawText) {
+    if (!rawText) return '';
+    const lines = rawText.split('\n');
+    const formattedLines = lines.map(line => {
+        let escaped = escapeHtml(line);
+        if (/QA\s*內部作業程序與協作說明書/i.test(escaped)) {
+            escaped = escaped.replace(
+                /QA\s*內部作業程序與協作說明書(?:\s*[:：]?\s*https?:\/\/[^\s<]+)?/gi,
+                `<a href="${QA_BYPASS_DOC_URL}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline; font-weight: bold;">QA 內部作業程序與協作說明書</a>`
+            );
+        }
+        return escaped;
+    });
+    return formattedLines.join('<br>');
+}
+
+async function copyRichAndPlainText(plainText, htmlText) {
+    if (!plainText) return false;
+
+    // 1. 優先使用標準 Clipboard API (支援 text/html 與 text/plain)
+    if (navigator.clipboard && typeof window.ClipboardItem !== 'undefined') {
+        try {
+            const blobHtml = new Blob([htmlText], { type: 'text/html' });
+            const blobText = new Blob([plainText], { type: 'text/plain' });
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    'text/html': blobHtml,
+                    'text/plain': blobText
+                })
+            ]);
+            return true;
+        } catch (err) {
+            console.warn('ClipboardItem 寫入失敗，嘗試備援方案:', err);
+        }
+    }
+
+    // 2. 備援機制：透過暫存元素與 copy 事件監聽同時寫入富文字與純文字
+    let copySuccess = false;
+    const copyHandler = (e) => {
+        try {
+            e.preventDefault();
+            e.clipboardData.setData('text/html', htmlText);
+            e.clipboardData.setData('text/plain', plainText);
+            copySuccess = true;
+        } catch (clipErr) {
+            console.warn('clipboardData.setData 失敗:', clipErr);
+        }
+    };
+
+    try {
+        document.addEventListener('copy', copyHandler);
+
+        const tempContainer = document.createElement('div');
+        tempContainer.setAttribute('contenteditable', 'true');
+        tempContainer.style.position = 'fixed';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.top = '-9999px';
+        tempContainer.style.opacity = '0';
+        tempContainer.innerHTML = htmlText;
+        document.body.appendChild(tempContainer);
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(tempContainer);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const execRes = document.execCommand('copy');
+        selection.removeAllRanges();
+        document.body.removeChild(tempContainer);
+
+        if (execRes || copySuccess) {
+            return true;
+        }
+    } catch (err) {
+        console.warn('execCommand 備援失敗:', err);
+    } finally {
+        document.removeEventListener('copy', copyHandler);
+    }
+
+    // 3. 最終降級：純文字複製
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(plainText);
+            return true;
+        } catch (e) {
+            console.warn('writeText 降級失敗:', e);
+        }
+    }
+
+    return false;
+}
+
+async function copyGeneratedResult() {
     const resultText = document.getElementById('generated-result');
-    const preview = document.getElementById('generated-result-preview');
-    const wasHidden = (resultText.style.display === 'none');
-    
-    if (wasHidden) {
-        resultText.style.display = 'block';
-        if (preview) preview.style.display = 'none';
+    const text = resultText ? resultText.value : '';
+    if (!text.trim()) {
+        showToast('無內容可複製', true);
+        return;
     }
-    
-    resultText.select();
-    document.execCommand('copy');
-    window.getSelection().removeAllRanges();
-    
-    if (wasHidden) {
-        resultText.style.display = 'none';
-        if (preview) preview.style.display = 'block';
+
+    const plain = formatReportContentToPlainText(text);
+    const html = formatReportContentToHtml(text);
+    try {
+        const success = await copyRichAndPlainText(plain, html);
+        if (success) {
+            showToast('已複製到剪貼簿！');
+        } else {
+            showToast('複製失敗，請手動複製', true);
+        }
+    } catch (err) {
+        console.error('複製失敗:', err);
+        showToast('複製失敗，請手動複製', true);
     }
-    
-    showToast('已複製到剪貼簿！');
 }
 
 function updateEnvButtons() {
@@ -3130,13 +3293,12 @@ function setTicketNotes(val) {
 }
 
 // ================= BY PASS Option Handling =================
-const QA_BYPASS_DOC_URL = 'https://docs.google.com/document/d/1yMUBr39HqPE-I2gVyY57YT9cPubu3K9HxJndfOEmLXw/edit?pli=1&tab=t.0';
 
 function formatLineWithDocLinks(line) {
     let escaped = escapeHtml(line);
     if (/QA\s*內部作業程序與協作說明書/i.test(escaped)) {
         escaped = escaped.replace(
-            /QA\s*內部作業程序與協作說明書/gi,
+            /QA\s*內部作業程序與協作說明書(?:\s*[:：]?\s*https?:\/\/[^\s<]+)?/gi,
             `<a href="${QA_BYPASS_DOC_URL}" target="_blank" rel="noopener noreferrer" class="text-blue-600 font-bold underline hover:text-blue-800 transition" onclick="event.stopPropagation()">QA 內部作業程序與協作說明書 ↗</a>`
         );
     }
@@ -3186,13 +3348,13 @@ function handleBypassOptionChange() {
     }
 
     if (checkedBoxes.length === 0) {
-        let bypassText = `BY PASS\nQA 內部作業程序與協作說明書`;
+        let bypassText = `BY PASS\nQA 內部作業程序與協作說明書：${QA_BYPASS_DOC_URL}`;
         setTicketNotes(bypassText);
         return;
     }
 
     const reasons = checkedBoxes.map(chk => chk.value);
-    let bypassText = `BY PASS\n原因：\n` + reasons.map(r => `- ${r}`).join('\n') + `\nQA 內部作業程序與協作說明書`;
+    let bypassText = `BY PASS\n原因：\n` + reasons.map(r => `- ${r}`).join('\n') + `\nQA 內部作業程序與協作說明書：${QA_BYPASS_DOC_URL}`;
     setTicketNotes(bypassText);
 }
 
@@ -3870,28 +4032,26 @@ function closeViewReportModal() {
     document.getElementById('view-report-modal').classList.add('hidden');
 }
 
-function copyViewReportNotes() {
+async function copyViewReportNotes() {
     const textarea = document.getElementById('view-generated-notes');
-    const preview = document.getElementById('view-generated-notes-preview');
-    const wasHidden = (textarea.style.display === 'none');
-    
-    if (wasHidden) {
-        textarea.style.display = 'block';
-        if (preview) preview.style.display = 'none';
+    const text = textarea ? textarea.value : '';
+    if (!text || text === '無測試紀錄內容') {
+        showToast('無內容可複製', true);
+        return;
     }
-    
-    textarea.select();
+
+    const plain = formatReportContentToPlainText(text);
+    const html = formatReportContentToHtml(text);
     try {
-        document.execCommand('copy');
-        window.getSelection().removeAllRanges();
-        showToast('已複製報告內容！');
-    } catch (err) {
-        showToast('複製失敗，請手動複製', true);
-    } finally {
-        if (wasHidden) {
-            textarea.style.display = 'none';
-            if (preview) preview.style.display = 'block';
+        const success = await copyRichAndPlainText(plain, html);
+        if (success) {
+            showToast('已複製報告內容！');
+        } else {
+            showToast('複製失敗，請手動複製', true);
         }
+    } catch (err) {
+        console.error('複製失敗:', err);
+        showToast('複製失敗，請手動複製', true);
     }
 }
 

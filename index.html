@@ -374,8 +374,8 @@
                         <button onclick="loadDashboard()"
                             class="bg-primary hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium transition ml-1">套用</button>
                         <button
-                            onclick="document.getElementById('dash-filter-start').value=''; document.getElementById('dash-filter-end').value=''; loadDashboard();"
-                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium transition ml-1">清除</button>
+                            onclick="resetDashboardFilter()"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium transition ml-1">重設</button>
                     </div>
                 </div>
 
@@ -456,7 +456,7 @@
                 </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                        <h3 class="text-lg font-semibold mb-4 text-gray-800">近 7 日測試趨勢</h3>
+                        <h3 class="text-lg font-semibold mb-4 text-gray-800">近期趨勢</h3>
                         <div class="relative h-64 w-full">
                             <canvas id="dailyChart"></canvas>
                         </div>
@@ -715,7 +715,7 @@
                 <div class="flex justify-between items-end mb-6">
                     <div>
                         <h1 class="text-3xl font-bold mb-2 text-gray-900">協作中心</h1>
-                        <p class="text-gray-600">佈告欄與代辦事項，目前所有資料皆暫存於您的瀏覽器中。</p>
+                        <p class="text-gray-600">佈告欄與近期系統更新紀錄。</p>
                     </div>
                     <button onclick="copyTicketTemplate()"
                         class="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center gap-2 border border-indigo-100">
@@ -754,23 +754,23 @@
                     </div>
 
 
-                    <!-- 代辦事項 -->
+                    <!-- 近期 Git 修正紀錄 (取代代辦事項) -->
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-[70vh]">
-                        <div
-                            class="px-5 py-4 border-b border-gray-100 bg-orange-50/50 flex justify-between items-center">
-                            <h3 class="font-bold text-orange-800 flex items-center gap-2">
-                                <span>✅</span> 代辦事項
+                        <div class="px-5 py-4 border-b border-gray-100 bg-slate-50/70 flex justify-between items-center">
+                            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                                <span>🛠️</span> 近期 Git 修正紀錄
                             </h3>
+                            <span class="text-xs bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-medium">前 3 次 Commit</span>
                         </div>
-                        <div class="p-4 flex flex-col gap-2 overflow-y-auto flex-1" id="collab-todo-list">
-                            <!-- Items -->
+                        <div class="p-5 flex flex-col gap-4 overflow-y-auto flex-1" id="git-changelog-list">
+                            <!-- 由 renderGitChangelog 動態渲染 -->
                         </div>
-                        <div class="p-4 border-t border-gray-100 bg-gray-50 flex gap-2">
-                            <input type="text" id="collab-todo-input" placeholder="新增任務..."
-                                class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:ring-primary focus:border-primary"
-                                onkeypress="if(event.key === 'Enter') addCollabItem('todo')">
-                            <button onclick="addCollabItem('todo')"
-                                class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">新增</button>
+                        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between text-xs text-gray-500">
+                            <span class="flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                記錄系統最近的重要功能修正與改動摘要
+                            </span>
+                            <span class="font-mono text-gray-400">git: main</span>
                         </div>
                     </div>
                 </div>
@@ -1716,7 +1716,7 @@
         </div>
 
         <!-- Scripts -->
-        <script src="app.js?v=20260703_1"></script>
+        <script src="app.js?v=20260923_1"></script>
 </body>
 
 </html>
