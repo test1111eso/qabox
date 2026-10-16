@@ -1,6 +1,9 @@
 .wrangler/
 worker/.wrangler/
 node_modules/
+dist/
+legacy_backup/
+*.tsbuildinfo
 *.log
 .assetsignore
 .wranglerignore
