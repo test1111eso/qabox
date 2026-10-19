@@ -2,8 +2,10 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useReportsStore } from '@/stores/reports';
+import { useFarmStore } from '@/stores/farm';
 import type { Report, ReportType } from '@/types';
 import ReportFormDialog from '@/components/reports/ReportFormDialog.vue';
+import PixelFarm from '@/components/game/PixelFarm.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Plus,
@@ -25,6 +27,15 @@ import { getTaiwanToday, getTaiwanFirstDay, getTaiwanMonday, getTaiwanDate } fro
 
 const authStore = useAuthStore();
 const reportsStore = useReportsStore();
+const farmStore = useFarmStore();
+
+// Workspace Tab（行事曆 vs 像素農場，支援刷新持久化記住分頁）
+const activeWorkspaceTab = ref<'calendar' | 'farm'>(
+  (localStorage.getItem('qabox_workspace_active_tab') as 'calendar' | 'farm') || 'calendar'
+);
+watch(activeWorkspaceTab, (newTab) => {
+  localStorage.setItem('qabox_workspace_active_tab', newTab);
+});
 
 // Calendar State（日曆：僅負責檢視月份熱度、選取日報日期）
 const now = new Date();
@@ -377,10 +388,25 @@ async function handleCopyNotes(notes: string) {
   }
 }
 
+function handleReportSaved() {
+  loadWorkspaceData();
+  if (dialogMode.value === 'create') {
+    farmStore.rewardOnReportCreate(dialogReportType.value);
+    ElMessage.success({
+      message:
+        dialogReportType.value === 'prod'
+          ? '🌾 QA 農場補給：獲得 2 包 QA 金肥料與稀有蜜瓜種子！'
+          : '🌾 QA 農場補給：獲得 1 包 QA 金肥料與草莓種子！',
+      duration: 3500,
+    });
+  }
+}
+
 onMounted(() => {
   selectedDate.value = getTaiwanToday();
   setTablePreset('today');
   loadWorkspaceData();
+  farmStore.loadState();
 });
 </script>
 
@@ -405,84 +431,121 @@ onMounted(() => {
 
     <!-- Main Workspace Grid: Calendar (Left 7 cols) & Monthly Metrics (Right 5 cols) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <!-- Left: Monthly Testing Calendar (7 cols) -->
+      <!-- Left: Monthly Testing Calendar or Pixel Farm (7 cols) -->
       <div class="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-          <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-            <el-icon class="text-blue-600"><Calendar /></el-icon>
-            <span>{{ calYear }} 年 {{ calMonth }} 月 測試狀況</span>
-          </h3>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 flex-wrap gap-2">
+          <div class="flex items-center gap-3 flex-wrap">
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+              <el-icon class="text-blue-600"><Calendar /></el-icon>
+              <span>{{ calYear }} 年 {{ calMonth }} 月 測試狀況</span>
+            </h3>
 
-          <div class="flex items-center gap-1.5">
+            <!-- Capsule Tab Switcher -->
+            <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+              <button
+                type="button"
+                class="px-2.5 py-1 rounded-md font-bold transition cursor-pointer flex items-center gap-1"
+                :class="activeWorkspaceTab === 'calendar' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-blue-600'"
+                @click="activeWorkspaceTab = 'calendar'"
+              >
+                <span>📅</span>
+                <span>測試行事曆</span>
+              </button>
+              <button
+                type="button"
+                class="relative px-2.5 py-1 rounded-md font-bold transition cursor-pointer flex items-center gap-1"
+                :class="activeWorkspaceTab === 'farm' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-emerald-700'"
+                @click="activeWorkspaceTab = 'farm'"
+              >
+                <span>🌾</span>
+                <span>悠閒農場</span>
+                <span
+                  v-if="farmStore.hasAlerts"
+                  class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse"
+                />
+              </button>
+            </div>
+          </div>
+
+          <!-- Calendar Controls (only show on calendar tab) -->
+          <div v-if="activeWorkspaceTab === 'calendar'" class="flex items-center gap-1.5">
             <el-button size="small" @click="resetToToday">今天</el-button>
             <el-button size="small" :icon="ArrowLeft" @click="changeMonth(-1)" />
             <el-button size="small" :icon="ArrowRight" @click="changeMonth(1)" />
           </div>
         </div>
 
-        <!-- Weekday Headers -->
-        <div class="grid grid-cols-7 gap-1.5 mb-1.5 text-center text-xs font-bold text-slate-400">
-          <div>日</div>
-          <div>一</div>
-          <div>二</div>
-          <div>三</div>
-          <div>四</div>
-          <div>五</div>
-          <div>六</div>
-        </div>
-
-        <!-- Calendar Cells Grid -->
-        <div class="grid grid-cols-7 gap-1.5">
-          <template v-for="cell in calendarDays" :key="cell.key">
-            <!-- Empty Placeholder Cell -->
-            <div
-              v-if="cell.empty"
-              class="h-16 rounded-lg bg-slate-50/50 border border-slate-100/60"
-            />
-
-            <!-- Active Day Cell -->
-            <div
-              v-else
-              class="h-16 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition select-none p-1"
-              :class="[
-                cell.isSelected
-                  ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-400'
-                  : cell.isToday
-                  ? 'border-blue-500 ring-1 ring-blue-300 bg-white hover:bg-slate-50'
-                  : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'
-              ]"
-              @click="handleSelectDate(cell.dateStr!)"
-            >
-              <span
-                class="text-xs font-semibold"
-                :class="cell.isToday ? 'text-blue-600 font-bold' : 'text-slate-700'"
-              >
-                {{ cell.day }}
-              </span>
-
-              <span
-                v-if="cell.count && cell.count > 0"
-                class="text-[11px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full mt-1 shadow-xs"
-              >
-                {{ cell.count }} 件
-              </span>
-              <span v-else class="text-[10px] text-transparent mt-1">-</span>
-            </div>
-          </template>
-        </div>
-
-        <!-- Calendar Footer Hint -->
-        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <div class="flex items-center gap-2">
-            <span class="inline-block w-3 h-3 rounded border border-blue-500 ring-1 ring-blue-300"></span>
-            <span>今日</span>
-            <span class="inline-block w-3 h-3 rounded bg-blue-600 ml-2"></span>
-            <span>有測試件數</span>
+        <!-- TAB 1: Calendar View -->
+        <template v-if="activeWorkspaceTab === 'calendar'">
+          <!-- Weekday Headers -->
+          <div class="grid grid-cols-7 gap-1.5 mb-1.5 text-center text-xs font-bold text-slate-400">
+            <div>日</div>
+            <div>一</div>
+            <div>二</div>
+            <div>三</div>
+            <div>四</div>
+            <div>五</div>
+            <div>六</div>
           </div>
-          <span v-if="selectedDate" class="text-blue-600 font-bold">
-            日報日期：{{ selectedDate }}（點日期同步帶入下方表格）
-          </span>
-        </div>
+
+          <!-- Calendar Cells Grid -->
+          <div class="grid grid-cols-7 gap-1.5">
+            <template v-for="cell in calendarDays" :key="cell.key">
+              <!-- Empty Placeholder Cell -->
+              <div
+                v-if="cell.empty"
+                class="h-16 rounded-lg bg-slate-50/50 border border-slate-100/60"
+              />
+
+              <!-- Active Day Cell -->
+              <div
+                v-else
+                class="h-16 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition select-none p-1"
+                :class="[
+                  cell.isSelected
+                    ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-400'
+                    : cell.isToday
+                    ? 'border-blue-500 ring-1 ring-blue-300 bg-white hover:bg-slate-50'
+                    : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                ]"
+                @click="handleSelectDate(cell.dateStr!)"
+              >
+                <span
+                  class="text-xs font-semibold"
+                  :class="cell.isToday ? 'text-blue-600 font-bold' : 'text-slate-700'"
+                >
+                  {{ cell.day }}
+                </span>
+
+                <span
+                  v-if="cell.count && cell.count > 0"
+                  class="text-[11px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full mt-1 shadow-xs"
+                >
+                  {{ cell.count }} 件
+                </span>
+                <span v-else class="text-[10px] text-transparent mt-1">-</span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Calendar Footer Hint -->
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-3 h-3 rounded border border-blue-500 ring-1 ring-blue-300"></span>
+              <span>今日</span>
+              <span class="inline-block w-3 h-3 rounded bg-blue-600 ml-2"></span>
+              <span>有測試件數</span>
+            </div>
+            <span v-if="selectedDate" class="text-blue-600 font-bold">
+              日報日期：{{ selectedDate }}（點日期同步帶入下方表格）
+            </span>
+          </div>
+        </template>
+
+        <!-- TAB 2: Pixel Farm View -->
+        <template v-else>
+          <PixelFarm />
+        </template>
       </div>
 
       <!-- Right: Personal Monthly Stats & Summary (5 cols) -->
@@ -789,7 +852,7 @@ onMounted(() => {
       :mode="dialogMode"
       :report-type="dialogReportType"
       :initial-report="selectedReport"
-      @saved="loadWorkspaceData"
+      @saved="handleReportSaved"
     />
 
     <!-- Detail Drawer -->

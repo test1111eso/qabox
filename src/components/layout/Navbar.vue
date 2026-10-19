@@ -78,8 +78,8 @@ onMounted(() => {
           </div>
           <div class="flex items-center gap-2">
             <div>
-              <span class="font-bold text-lg tracking-wide text-white">Q-Draft</span>
-              <span class="text-xs text-blue-400 ml-1.5 font-medium px-2 py-0.5 bg-blue-900/60 rounded">除草室</span>
+              <span class="font-bold text-lg tracking-wide text-white">Q-Draft除草室</span>
+             
             </div>
             <!-- Top Duty Tester Badge -->
             <div class="hidden sm:flex items-center bg-yellow-400/15 text-yellow-300 px-3 py-1 rounded-md text-xs font-bold border border-yellow-400/30 shadow-sm ml-2">
