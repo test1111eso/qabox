@@ -13,6 +13,7 @@ import {
   Document,
   DocumentCopy,
   ArrowDown,
+  Promotion,
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
@@ -200,15 +201,37 @@ function renderCharts() {
   }
 }
 
-async function openIssueReports(type: 'fail' | 'blocked' | 'all') {
+async function openReportDrawer(type: 'total' | 't' | 'p' | 'fail' | 'blocked') {
   issueLoading.value = true;
-  issueDrawerTitle.value =
-    type === 'blocked' ? '阻礙中 (Blocked) 案件清單' : type === 'fail' ? '測試失敗 (Fail) 案件清單' : '未解決異常案件';
+  if (type === 'total') {
+    issueDrawerTitle.value = `區間測試總量 (${startDate.value} ～ ${endDate.value})`;
+  } else if (type === 't') {
+    issueDrawerTitle.value = `T單 (測試) 案件清單 (${startDate.value} ～ ${endDate.value})`;
+  } else if (type === 'p') {
+    issueDrawerTitle.value = `P單 (上正式) 案件清單 (${startDate.value} ～ ${endDate.value})`;
+  } else if (type === 'fail') {
+    issueDrawerTitle.value = '全站未解決測試失敗 (Fail) 案件清單';
+  } else if (type === 'blocked') {
+    issueDrawerTitle.value = '全站未解決阻礙中 (Blocked) 案件清單';
+  }
   showIssueDrawer.value = true;
   try {
-    const data = await reportsApi.getReports({
-      status: type === 'blocked' ? 'Blocked' : type === 'fail' ? 'Fail' : undefined,
-    });
+    let data: Report[] = [];
+    if (type === 'blocked' || type === 'fail') {
+      data = await reportsApi.getReports({
+        status: type === 'blocked' ? 'Blocked' : 'Fail',
+      });
+    } else {
+      data = await reportsApi.getReports({
+        startDate: startDate.value,
+        endDate: endDate.value,
+      });
+      if (type === 't') {
+        data = data.filter((r) => !r.case_no.startsWith('P'));
+      } else if (type === 'p') {
+        data = data.filter((r) => r.case_no.startsWith('P'));
+      }
+    }
     issueReports.value = data.filter((r) => !r.is_deleted);
   } catch (err: any) {
     ElMessage.error(err.message || '載入案件失敗');
@@ -216,6 +239,8 @@ async function openIssueReports(type: 'fail' | 'blocked' | 'all') {
     issueLoading.value = false;
   }
 }
+
+
 
 function selectAllTesters() {
   selectedTesters.value = activeTestersList.value.map((t) => t.tester_name);
@@ -275,45 +300,57 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 4 Summary KPI Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <!-- Total Count -->
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+    <!-- 5 Summary KPI Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <!-- 1. Total Count (clickable) -->
+      <div
+        class="bg-white rounded-xl p-5 shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition"
+        @click="openReportDrawer('total')"
+      >
         <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-slate-500">區間測試總量</span>
+          <span class="text-xs font-semibold text-slate-600">區間測試總量</span>
           <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
             <el-icon><DataLine /></el-icon>
           </div>
         </div>
         <div class="text-2xl font-black text-slate-800 mt-2">{{ statsData.monthTotal || 0 }}</div>
-        <div class="text-xs text-slate-400 mt-1">選定日期區間累計完成案件</div>
+        <div class="text-xs text-slate-400 mt-1">選定區間累計完成案件</div>
       </div>
 
-      <!-- T / P counts -->
-      <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
+      <!-- 2. T單 (測試) (clickable) -->
+      <div
+        class="bg-white rounded-xl p-5 shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-indigo-300 transition"
+        @click="openReportDrawer('t')"
+      >
         <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-indigo-600">案件分類統計</span>
+          <span class="text-xs font-semibold text-indigo-600">T單 (測試)</span>
           <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
             <el-icon><Document /></el-icon>
           </div>
         </div>
-        <div class="flex items-baseline gap-3 mt-2">
-          <div>
-            <span class="text-xs text-slate-500">T單 (測試): </span>
-            <span class="text-xl font-black text-blue-600">{{ statsData.typeStats?.t_count || 0 }}</span>
-          </div>
-          <div>
-            <span class="text-xs text-slate-500">P單 (上正式): </span>
-            <span class="text-xl font-black text-rose-600">{{ statsData.typeStats?.p_count || 0 }}</span>
-          </div>
-        </div>
-        <div class="text-xs text-slate-400 mt-1">一般測試與發布案件分佈</div>
+        <div class="text-2xl font-black text-blue-600 mt-2">{{ statsData.typeStats?.t_count || 0 }}</div>
+        <div class="text-xs text-indigo-400 mt-1">一般功能測試案件</div>
       </div>
 
-      <!-- Open Fail (clickable) -->
+      <!-- 3. P單 (上正式) (clickable) -->
       <div
-        class="bg-white rounded-xl p-5 shadow-sm border border-rose-200 cursor-pointer hover:shadow-md transition"
-        @click="openIssueReports('fail')"
+        class="bg-white rounded-xl p-5 shadow-sm border border-slate-200 cursor-pointer hover:shadow-md hover:border-rose-300 transition"
+        @click="openReportDrawer('p')"
+      >
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-rose-600">P單 (上正式)</span>
+          <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+            <el-icon><Promotion /></el-icon>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-rose-600 mt-2">{{ statsData.typeStats?.p_count || 0 }}</div>
+        <div class="text-xs text-rose-400 mt-1">發布正式上線單</div>
+      </div>
+
+      <!-- 4. Open Fail (clickable) -->
+      <div
+        class="bg-white rounded-xl p-5 shadow-sm border border-rose-200 cursor-pointer hover:shadow-md hover:border-rose-400 transition"
+        @click="openReportDrawer('fail')"
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-semibold text-rose-600">全站未解決失敗</span>
@@ -322,16 +359,13 @@ onMounted(() => {
           </div>
         </div>
         <div class="text-2xl font-black text-rose-600 mt-2">{{ statsData.openFailCount || 0 }}</div>
-        <div class="text-xs text-rose-400 mt-1 flex items-center justify-between">
-          <span>待開發人員修復</span>
-          <span class="text-xs underline font-semibold">查看清單 →</span>
-        </div>
+        <div class="text-xs text-rose-400 mt-1">待開發人員修復</div>
       </div>
 
-      <!-- Open Blocked (clickable) -->
+      <!-- 5. Open Blocked (clickable) -->
       <div
-        class="bg-white rounded-xl p-5 shadow-sm border border-amber-200 cursor-pointer hover:shadow-md transition"
-        @click="openIssueReports('blocked')"
+        class="bg-white rounded-xl p-5 shadow-sm border border-amber-200 cursor-pointer hover:shadow-md hover:border-amber-400 transition"
+        @click="openReportDrawer('blocked')"
       >
         <div class="flex items-center justify-between">
           <span class="text-xs font-semibold text-amber-600">全站未解決阻礙中</span>
@@ -340,10 +374,7 @@ onMounted(() => {
           </div>
         </div>
         <div class="text-2xl font-black text-amber-600 mt-2">{{ statsData.openBlockedCount || 0 }}</div>
-        <div class="text-xs text-amber-500 mt-1 flex items-center justify-between">
-          <span>環境或依賴阻斷</span>
-          <span class="text-xs underline font-semibold">查看清單 →</span>
-        </div>
+        <div class="text-xs text-amber-500 mt-1">環境或依賴阻斷</div>
       </div>
     </div>
 
@@ -551,11 +582,20 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Issue Reports Drawer (Fail / Blocked) -->
+    <!-- Reports Drawer (Total / T / P / Fail / Blocked) -->
     <el-drawer v-model="showIssueDrawer" :title="issueDrawerTitle" size="550px">
+      <template #header>
+        <div class="flex items-center justify-between pr-4">
+          <h3 class="text-base font-bold text-slate-800">{{ issueDrawerTitle }}</h3>
+          <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">
+            共 {{ issueReports.length }} 筆
+          </span>
+        </div>
+      </template>
+
       <div v-loading="issueLoading" class="space-y-3">
         <div v-if="issueReports.length === 0" class="text-center py-8 text-sm text-slate-400">
-          無此類未解決案件 🎉
+          此分類目前無案件記錄 🎉
         </div>
         <div
           v-for="r in issueReports"
@@ -565,9 +605,25 @@ onMounted(() => {
         >
           <div class="flex items-center justify-between mb-1">
             <span class="font-mono font-bold text-blue-600 text-sm">{{ r.case_no }}</span>
-            <el-tag :type="r.status === 'Fail' ? 'danger' : 'warning'" size="small">
-              {{ r.status }}
-            </el-tag>
+            <div class="flex items-center gap-1.5">
+              <span
+                v-if="r.category"
+                class="text-[11px] px-1.5 py-0.5 rounded font-medium"
+                :class="[
+                  r.category === '求職' ? 'bg-blue-100 text-blue-700' :
+                  r.category === '新求才' || r.category === '現版求才' ? 'bg-orange-100 text-orange-700' :
+                  r.category === '活動' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                ]"
+              >
+                {{ r.category }}
+              </span>
+              <el-tag
+                :type="r.status === 'Pass' ? 'success' : r.status === 'Fail' ? 'danger' : 'warning'"
+                size="small"
+              >
+                {{ r.status === 'Pass' ? '通過' : r.status === 'Fail' ? '失敗' : '阻礙中' }}
+              </el-tag>
+            </div>
           </div>
           <h4 class="text-xs font-bold text-slate-800 line-clamp-1">{{ r.project_name }}</h4>
           <div class="flex items-center justify-between text-xs text-slate-400 mt-2 pt-2 border-t border-slate-200/60">

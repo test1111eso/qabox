@@ -1,4 +1,4 @@
-import type { ParsedTicketFields, ReportStatus } from '@/types';
+import type { ParsedTicketFields, ReportStatus, ReportType } from '@/types';
 
 export function getNotesWithoutTesterRemark(notes: string): string {
   if (!notes) return '';
@@ -205,6 +205,7 @@ export function parseReportNotesToFields(
 
 export function buildFullReportTemplate(data: {
   category?: string;
+  report_type?: ReportType | string;
   case_no?: string;
   project_name?: string;
   test_date?: string;
@@ -223,7 +224,9 @@ export function buildFullReportTemplate(data: {
   status?: ReportStatus | string;
 }): string {
   const cat = data.category || '其他';
-  let tpl = cat === '其他' ? '【測試紀錄】' : `【測試紀錄-${cat}】`;
+  const isProd = data.report_type === 'prod' || (data.case_no && data.case_no.startsWith('P'));
+  const titlePrefix = isProd ? '上正式紀錄' : '測試紀錄';
+  let tpl = cat === '其他' ? `【${titlePrefix}】` : `【${titlePrefix}-${cat}】`;
 
   if (data.case_no) tpl += `\n案件編號：${data.case_no}`;
   if (data.project_name) tpl += `\n專案名稱：${data.project_name}`;

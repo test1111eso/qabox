@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useReportsStore } from '@/stores/reports';
 import { useAuthStore } from '@/stores/auth';
 import type { Report, ReportType } from '@/types';
@@ -20,6 +20,30 @@ import { getTaiwanFirstDay, getTaiwanToday } from '@/utils/date';
 
 const reportsStore = useReportsStore();
 const authStore = useAuthStore();
+
+// Pagination State (最多顯示三十筆案件)
+const currentPage = ref(1);
+const pageSize = ref(30);
+
+const paginatedReports = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return reportsStore.sortedReports.slice(start, start + pageSize.value);
+});
+
+// Reset page when filter conditions change
+watch(
+  () => [
+    reportsStore.filterStartDate,
+    reportsStore.filterEndDate,
+    reportsStore.filterType,
+    reportsStore.filterCategory,
+    reportsStore.filterStatus,
+    reportsStore.filterSearch,
+  ],
+  () => {
+    currentPage.value = 1;
+  }
+);
 
 // Dialogs
 const showReportDialog = ref(false);
@@ -245,7 +269,7 @@ onMounted(() => {
       </div>
 
       <el-table
-        :data="reportsStore.sortedReports"
+        :data="paginatedReports"
         style="width: 100%"
         stripe
         v-loading="reportsStore.loading"
@@ -337,6 +361,22 @@ onMounted(() => {
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- Pagination (最多顯示 30 筆) -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500">
+        <div>
+          顯示第 {{ reportsStore.sortedReports.length === 0 ? 0 : (currentPage - 1) * pageSize + 1 }} 至 {{ Math.min(currentPage * pageSize, reportsStore.sortedReports.length) }} 筆（共 {{ reportsStore.sortedReports.length }} 筆，每頁最多 30 筆）
+        </div>
+        <el-pagination
+          v-model:current-page="currentPage"
+          :page-size="pageSize"
+          :total="reportsStore.sortedReports.length"
+          layout="prev, pager, next"
+          :hide-on-single-page="true"
+          background
+          size="small"
+        />
+      </div>
     </div>
 
     <!-- Report Form Modal -->

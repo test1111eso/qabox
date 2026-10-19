@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import type { Report } from '@/types';
 import { reportsApi } from '@/api/client';
 import { getTaiwanToday } from '@/utils/date';
+import { ElMessage } from 'element-plus';
 
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<Report[]>([]);
@@ -68,8 +69,17 @@ export const useReportsStore = defineStore('reports', () => {
   }
 
   async function togglePin(report: Report) {
-    const res = await reportsApi.togglePin(report.id, report.is_pinned || 0);
-    report.is_pinned = res.is_pinned;
+    const currentPinned = Number(report.is_pinned) === 1 ? 1 : 0;
+    const targetPinned = currentPinned === 1 ? 0 : 1;
+    report.is_pinned = targetPinned;
+    try {
+      const res = await reportsApi.togglePin(report.id, currentPinned);
+      report.is_pinned = typeof res.is_pinned === 'number' ? res.is_pinned : targetPinned;
+      ElMessage.success(report.is_pinned === 1 ? '已加上星號' : '已取消星號');
+    } catch (err: any) {
+      report.is_pinned = currentPinned;
+      ElMessage.error(err.message || '更新星號失敗');
+    }
   }
 
   async function deleteReport(id: number) {

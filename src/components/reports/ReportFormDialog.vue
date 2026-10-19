@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import type { Report, ReportCategory, ReportStatus, ReportType } from '@/types';
 import { reportsApi } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
@@ -8,7 +8,6 @@ import {
   parseReportNotesToFields,
   buildFullReportTemplate,
   buildFullNotesFromParts,
-  getNotesWithoutTesterRemark,
   getTesterRemarkFromReport,
 } from '@/utils/parser';
 import { ElMessage } from 'element-plus';
@@ -93,9 +92,24 @@ const risk = ref('低');
 const passRate = ref('100%');
 const status = ref<ReportStatus>('Blocked');
 
-// Preview override
+// Preview override & scroll sync
 const manualPreview = ref('');
 const isManualPreview = ref(false);
+const leftPaneRef = ref<HTMLElement | null>(null);
+const previewTextareaRef = ref<HTMLTextAreaElement | null>(null);
+
+function handleLeftScroll() {
+  const leftEl = leftPaneRef.value;
+  const previewEl = previewTextareaRef.value;
+  if (!leftEl || !previewEl) return;
+
+  const maxLeft = leftEl.scrollHeight - leftEl.clientHeight;
+  const maxPreview = previewEl.scrollHeight - previewEl.clientHeight;
+  if (maxLeft > 0 && maxPreview > 0) {
+    const ratio = leftEl.scrollTop / maxLeft;
+    previewEl.scrollTop = ratio * maxPreview;
+  }
+}
 
 const envPresets = [
   { label: '主網', url: 'https://www.1111.com.tw/' },
@@ -274,11 +288,9 @@ function parseDevicesIntoFields(str: string) {
 }
 
 const generatedPreview = computed(() => {
-  if (isManualPreview.value && manualPreview.value) {
-    return manualPreview.value;
-  }
   return buildFullReportTemplate({
     category: category.value,
+    report_type: currentType.value,
     case_no: caseNo.value,
     project_name: projectName.value,
     test_date: testDate.value,
@@ -298,6 +310,37 @@ const generatedPreview = computed(() => {
   });
 });
 
+const displayPreview = computed({
+  get() {
+    if (isManualPreview.value) {
+      return manualPreview.value;
+    }
+    return generatedPreview.value;
+  },
+  set(val: string) {
+    manualPreview.value = val;
+    isManualPreview.value = true;
+  },
+});
+
+function resetToAutoPreview() {
+  isManualPreview.value = false;
+  manualPreview.value = '';
+}
+
+function handleCategoryChange(cat: ReportCategory) {
+  category.value = cat;
+  if (isManualPreview.value && manualPreview.value) {
+    const isProd = currentType.value === 'prod' || caseNo.value.startsWith('P');
+    const prefix = isProd ? '上正式紀錄' : '測試紀錄';
+    const newHeader = cat === '其他' ? `【${prefix}】` : `【${prefix}-${cat}】`;
+    manualPreview.value = manualPreview.value.replace(
+      /【(?:測試紀錄|上正式紀錄)(?:-[^】]+)?】/,
+      newHeader
+    );
+  }
+}
+
 async function fetchNextCaseNo() {
   allocatingCaseNo.value = true;
   try {
@@ -314,6 +357,16 @@ async function handleTypeChange(type: ReportType) {
   currentType.value = type;
   if (props.mode === 'create' || props.mode === 'copy') {
     await fetchNextCaseNo();
+  }
+  if (isManualPreview.value && manualPreview.value) {
+    const isProd = type === 'prod';
+    const prefix = isProd ? '上正式紀錄' : '測試紀錄';
+    const cat = category.value;
+    const newHeader = cat === '其他' ? `【${prefix}】` : `【${prefix}-${cat}】`;
+    manualPreview.value = manualPreview.value.replace(
+      /【(?:測試紀錄|上正式紀錄)(?:-[^】]+)?】/,
+      newHeader
+    );
   }
 }
 
@@ -357,6 +410,10 @@ watch(
       isManualPreview.value = false;
       manualPreview.value = '';
       currentType.value = props.reportType || 'normal';
+      nextTick(() => {
+        if (leftPaneRef.value) leftPaneRef.value.scrollTop = 0;
+        if (previewTextareaRef.value) previewTextareaRef.value.scrollTop = 0;
+      });
 
       if (props.mode === 'create') {
         rawTicket.value = '';
@@ -426,17 +483,32 @@ watch(
           await fetchNextCaseNo();
           testDate.value = getTaiwanToday();
           testerName.value = authStore.currentDisplayName;
-        } else {
-          manualPreview.value = getNotesWithoutTesterRemark(r.notes);
-          isManualPreview.value = true;
         }
+        isManualPreview.value = false;
+        manualPreview.value = '';
       }
     }
   }
 );
 
 async function handleSave() {
-  if (!projectName.value.trim()) {
+  let finalProjectName = projectName.value.trim();
+  if (!finalProjectName && displayPreview.value) {
+    const parsed = parseReportNotesToFields(displayPreview.value);
+    if (parsed.project_name) {
+      finalProjectName = parsed.project_name;
+      projectName.value = parsed.project_name;
+    }
+  }
+  if (isManualPreview.value && displayPreview.value) {
+    const parsed = parseReportNotesToFields(displayPreview.value);
+    if (parsed.project_name && parsed.project_name !== finalProjectName) {
+      finalProjectName = parsed.project_name;
+      projectName.value = parsed.project_name;
+    }
+  }
+
+  if (!finalProjectName) {
     ElMessage.warning('請輸入專案名稱');
     return;
   }
@@ -447,16 +519,17 @@ async function handleSave() {
 
   saving.value = true;
   try {
-    const finalNotes = buildFullNotesFromParts(generatedPreview.value, testerRemark.value);
+    const finalNotes = buildFullNotesFromParts(displayPreview.value, testerRemark.value);
     const payload: Partial<Report> = {
       case_no: caseNo.value.trim(),
-      project_name: projectName.value.trim(),
+      project_name: finalProjectName,
       tester_name: testerName.value.trim(),
       test_date: testDate.value,
       status: status.value,
       category: category.value,
       notes: finalNotes,
-      raw_ticket: rawTicket.value.trim() || undefined,
+      bug_link: props.initialReport?.bug_link || '',
+      raw_ticket: rawTicket.value.trim() || '',
       owner_user_id: authStore.currentUserId,
     };
 
@@ -480,7 +553,7 @@ async function handleSave() {
 }
 
 async function copyPreviewText() {
-  const plainText = generatedPreview.value;
+  const plainText = displayPreview.value;
   if (!plainText) return;
 
   const lines = plainText.split('\n');
@@ -535,9 +608,9 @@ async function copyPreviewText() {
     class="report-dialog"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-h-[78vh] overflow-y-auto px-1">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-h-[78vh] lg:h-[78vh] overflow-y-auto lg:overflow-hidden px-1">
       <!-- Left Column: Inputs & Form (7 cols) -->
-      <div class="lg:col-span-7 space-y-4">
+      <div ref="leftPaneRef" class="lg:col-span-7 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-2" @scroll="handleLeftScroll">
         <!-- Step 1: Category & Ticket Input -->
         <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-4 shadow-sm">
           <div class="flex items-center justify-between mb-2.5">
@@ -582,7 +655,7 @@ async function copyPreviewText() {
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                     : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-100'
                 ]"
-                @click="category = cat"
+                @click="handleCategoryChange(cat)"
               >
                 {{ cat }}
               </button>
@@ -990,11 +1063,25 @@ async function copyPreviewText() {
       </div>
 
       <!-- Right Column: Live Real-time Preview (5 cols) -->
-      <div class="lg:col-span-5 flex flex-col space-y-3">
-        <div class="flex items-center justify-between">
+      <div class="lg:col-span-5 flex flex-col space-y-3 lg:h-full min-h-[460px]">
+        <div class="flex items-center justify-between shrink-0">
           <span class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
             <span>📄 即時成稿預覽</span>
-            <span class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">實時同步</span>
+            <span
+              v-if="!isManualPreview"
+              class="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium"
+            >
+              實時同步
+            </span>
+            <button
+              v-else
+              type="button"
+              class="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2 py-0.5 rounded font-medium cursor-pointer transition"
+              title="點擊恢復與左側欄位實時同步"
+              @click="resetToAutoPreview"
+            >
+              手動編輯中（點擊恢復同步）
+            </button>
           </span>
           <el-button
             type="primary"
@@ -1007,15 +1094,15 @@ async function copyPreviewText() {
           </el-button>
         </div>
 
-        <div class="flex-1 min-h-[460px] bg-slate-900 rounded-xl p-4 text-emerald-400 font-mono text-xs flex flex-col shadow-inner border border-slate-800">
+        <div class="flex-1 min-h-[360px] lg:min-h-0 bg-slate-900 rounded-xl p-4 text-emerald-400 font-mono text-xs flex flex-col shadow-inner border border-slate-800 overflow-hidden">
           <textarea
-            v-model="manualPreview"
-            class="w-full flex-1 bg-transparent border-0 outline-none resize-none font-mono text-emerald-300 leading-relaxed"
-            :placeholder="generatedPreview"
-            @input="isManualPreview = true"
+            ref="previewTextareaRef"
+            v-model="displayPreview"
+            class="w-full h-full flex-1 bg-transparent border-0 outline-none resize-none font-mono text-emerald-300 leading-relaxed overflow-y-auto"
+            placeholder="預覽內容將隨左側欄位即時生成..."
           />
         </div>
-        <p class="text-xs text-slate-500">
+        <p class="shrink-0 text-xs text-slate-500">
           💡 提示：左側表單修改時右側即時聯動。一鍵複製時自動生成純文字與超連結格式（可直接貼入工單或通訊軟體）。
         </p>
       </div>

@@ -123,10 +123,15 @@ export const reportsApi = {
 
   async togglePin(id: number, currentPinned: number): Promise<{ success: boolean; is_pinned: number }> {
     const token = getToken();
-    return request<{ success: boolean; is_pinned: number }>('/api/reports/pin', {
+    const targetPinned = currentPinned === 1 ? 0 : 1;
+    const res = await request<{ success: boolean; is_pinned?: number }>('/api/reports/pin', {
       method: 'POST',
-      body: JSON.stringify({ id, is_pinned: currentPinned === 1 ? 0 : 1, token }),
+      body: JSON.stringify({ id, is_pinned: targetPinned, token }),
     });
+    return {
+      success: res.success,
+      is_pinned: typeof res.is_pinned === 'number' ? res.is_pinned : targetPinned,
+    };
   },
 
   async deleteReport(id: number): Promise<void> {

@@ -592,14 +592,11 @@ export default {
         if (!report) {
           return new Response(JSON.stringify({ error: '報告不存在' }), { status: 404, headers: corsHeaders });
         }
-
-        if (user.role !== 'admin' && !userOwnsReport(user, report)) {
-          return new Response(JSON.stringify({ error: '您無權釘選其他測試員的報告' }), { status: 403, headers: corsHeaders });
-        }
         
-        await env.DB.prepare('UPDATE reports SET is_pinned = ? WHERE id = ?').bind(is_pinned ? 1 : 0, id).run();
+        const nextPinned = is_pinned ? 1 : 0;
+        await env.DB.prepare('UPDATE reports SET is_pinned = ? WHERE id = ?').bind(nextPinned, id).run();
         
-        return new Response(JSON.stringify({ success: true }), {
+        return new Response(JSON.stringify({ success: true, is_pinned: nextPinned }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
