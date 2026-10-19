@@ -402,6 +402,37 @@ function handleReportSaved() {
   }
 }
 
+// 根據當前時段動態顯示問候語與提示
+const greetingInfo = computed(() => {
+  const hour = getTaiwanDate().getHours();
+  if (hour >= 5 && hour < 11) {
+    return {
+      title: `早安，${authStore.currentDisplayName}！`,
+      sub: '新的一天開始了！日曆檢視每日產出與日報，下方表格可自由查詢任意區間的個人工單',
+    };
+  } else if (hour >= 11 && hour < 14) {
+    return {
+      title: `午安，${authStore.currentDisplayName}！`,
+      sub: '辛苦了，午休充電時間！日曆檢視產出進度，下方表格可自由查詢個人工單',
+    };
+  } else if (hour >= 14 && hour < 18) {
+    return {
+      title: `下午好，${authStore.currentDisplayName}！`,
+      sub: '下午衝刺階段！日曆檢視每日產出與日報，下方表格可自由查詢任意區間的個人工單',
+    };
+  } else if (hour >= 18 && hour < 22) {
+    return {
+      title: `傍晚好，${authStore.currentDisplayName}！`,
+      sub: '今天辛苦了！可利用上方摘要一鍵複製日報回報，下方表格可查詢個人工單',
+    };
+  } else {
+    return {
+      title: `夜深了，${authStore.currentDisplayName}！`,
+      sub: '忙碌了一天記得早點休息！日曆與下方表格可隨時回顧歷史工單與產出',
+    };
+  }
+});
+
 onMounted(() => {
   selectedDate.value = getTaiwanToday();
   setTablePreset('today');
@@ -415,8 +446,8 @@ onMounted(() => {
     <!-- Top Action Bar -->
     <div class="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-slate-800">早安，{{ authStore.currentDisplayName }}！</h2>
-        <p class="text-xs text-slate-500 mt-0.5">日曆檢視每日產出與日報，下方表格可自由查詢任意區間的個人工單</p>
+        <h2 class="text-lg font-bold text-slate-800">{{ greetingInfo.title }}</h2>
+        <p class="text-xs text-slate-500 mt-0.5">{{ greetingInfo.sub }}</p>
       </div>
 
       <div class="flex items-center gap-2 flex-wrap">
