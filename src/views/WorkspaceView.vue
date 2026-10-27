@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useReportsStore } from '@/stores/reports';
-import { useFarmStore } from '@/stores/farm';
 import type { Report, ReportType } from '@/types';
 import ReportFormDialog from '@/components/reports/ReportFormDialog.vue';
-import PixelFarm from '@/components/game/PixelFarm.vue';
+import BingoGame from '@/components/game/BingoGame.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Plus,
@@ -27,14 +27,19 @@ import { getTaiwanToday, getTaiwanFirstDay, getTaiwanMonday, getTaiwanDate } fro
 
 const authStore = useAuthStore();
 const reportsStore = useReportsStore();
-const farmStore = useFarmStore();
 
-// Workspace Tab（行事曆 vs 像素農場，支援刷新持久化記住分頁）
-const activeWorkspaceTab = ref<'calendar' | 'farm'>(
-  (localStorage.getItem('qabox_workspace_active_tab') as 'calendar' | 'farm') || 'calendar'
-);
+const route = useRoute();
+const router = useRouter();
+const savedWorkspaceTab = localStorage.getItem('qabox_workspace_active_tab');
+const activeWorkspaceTab = ref<'calendar' | 'bingo'>(savedWorkspaceTab === 'bingo' || savedWorkspaceTab === 'farm' ? 'bingo' : 'calendar');
+watch(() => route.query.tab, tab => {
+  if (tab === 'bingo') activeWorkspaceTab.value = 'bingo';
+}, { immediate: true });
 watch(activeWorkspaceTab, (newTab) => {
   localStorage.setItem('qabox_workspace_active_tab', newTab);
+  if (newTab === 'calendar' && route.query.tab === 'bingo') {
+    void router.replace({ query: { ...route.query, tab: undefined } });
+  }
 });
 
 // Calendar State（日曆：僅負責檢視月份熱度、選取日報日期）
@@ -390,16 +395,6 @@ async function handleCopyNotes(notes: string) {
 
 function handleReportSaved() {
   loadWorkspaceData();
-  if (dialogMode.value === 'create') {
-    farmStore.rewardOnReportCreate(dialogReportType.value);
-    ElMessage.success({
-      message:
-        dialogReportType.value === 'prod'
-          ? '🌾 QA 農場補給：獲得 2 包 QA 金肥料與稀有蜜瓜種子！'
-          : '🌾 QA 農場補給：獲得 1 包 QA 金肥料與草莓種子！',
-      duration: 3500,
-    });
-  }
 }
 
 // 根據當前時段動態顯示問候語與提示
@@ -437,7 +432,6 @@ onMounted(() => {
   selectedDate.value = getTaiwanToday();
   setTablePreset('today');
   loadWorkspaceData();
-  farmStore.loadState();
 });
 </script>
 
@@ -462,7 +456,7 @@ onMounted(() => {
 
     <!-- Main Workspace Grid: Calendar (Left 7 cols) & Monthly Metrics (Right 5 cols) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <!-- Left: Monthly Testing Calendar or Pixel Farm (7 cols) -->
+      <!-- Left: Monthly Testing Calendar or Bingo (7 cols) -->
       <div class="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
         <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 flex-wrap gap-2">
           <div class="flex items-center gap-3 flex-wrap">
@@ -485,15 +479,11 @@ onMounted(() => {
               <button
                 type="button"
                 class="relative px-2.5 py-1 rounded-md font-bold transition cursor-pointer flex items-center gap-1"
-                :class="activeWorkspaceTab === 'farm' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-emerald-700'"
-                @click="activeWorkspaceTab = 'farm'"
+                :class="activeWorkspaceTab === 'bingo' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-indigo-700'"
+                @click="activeWorkspaceTab = 'bingo'"
               >
-                <span>🌾</span>
-                <span>悠閒農場</span>
-                <span
-                  v-if="farmStore.hasAlerts"
-                  class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white animate-pulse"
-                />
+                <span>🎱</span>
+                <span>賓果連線</span>
               </button>
             </div>
           </div>
@@ -573,9 +563,9 @@ onMounted(() => {
           </div>
         </template>
 
-        <!-- TAB 2: Pixel Farm View -->
+        <!-- TAB 2: Bingo -->
         <template v-else>
-          <PixelFarm />
+          <BingoGame />
         </template>
       </div>
 

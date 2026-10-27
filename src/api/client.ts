@@ -7,13 +7,13 @@ import type {
   LoginResponse,
 } from '@/types';
 
-export const API_BASE = 'https://qagame.test1111-tcm-tc.workers.dev';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'https://qagame.test1111-tcm-tc.workers.dev';
 
 export function getToken(): string {
   return localStorage.getItem('qa_session_token') || '';
 }
 
-async function request<T>(
+export async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {

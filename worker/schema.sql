@@ -1,6 +1,9 @@
 -- DROP TABLE IF EXISTS reports;
 -- DROP TABLE IF EXISTS documents;
 
+-- 賓果資料表與原子成員資格觸發器：見 migrations/0001_bingo.sql。
+-- 本檔是既有 QA 基礎資料表參考；賓果變更請透過 D1 migrations apply 套用。
+
 CREATE TABLE IF NOT EXISTS documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

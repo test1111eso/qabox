@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:bingo": "node --test tests/bingo.test.js tests/bingo-store.test.js",
+    "test:login": "node --test tests/login-feedback.test.js",
+    "dev:worker": "wrangler dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply qabox --local",
+    "worker:check": "wrangler deploy --dry-run"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -25,6 +30,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
-    "vue-tsc": "^2.2.0"
+    "vue-tsc": "^2.2.0",
+    "wrangler": "^4.153.0"
   }
 }

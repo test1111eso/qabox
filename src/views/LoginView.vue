@@ -41,7 +41,6 @@ async function handleSubmit() {
         username: username.value.trim(),
         password: password.value,
       });
-      ElMessage.success(`歡迎回來，${authStore.currentDisplayName}！`);
       router.push('/dashboard');
     }
   } catch (err: any) {

@@ -18,11 +18,9 @@ import {
 } from '@element-plus/icons-vue';
 import { getTaiwanFirstDay, getTaiwanToday } from '@/utils/date';
 
-import { useFarmStore } from '@/stores/farm';
 
 const reportsStore = useReportsStore();
 const authStore = useAuthStore();
-const farmStore = useFarmStore();
 
 // Pagination State (最多顯示三十筆案件)
 const currentPage = ref(1);
@@ -147,21 +145,10 @@ async function handleCopyNotes(notes: string) {
 
 function handleReportSaved() {
   reportsStore.fetchReports();
-  if (dialogMode.value === 'create') {
-    farmStore.rewardOnReportCreate(dialogReportType.value);
-    ElMessage.success({
-      message:
-        dialogReportType.value === 'prod'
-          ? '🌾 QA 農場補給：獲得 2 包 QA 金肥料與稀有蜜瓜種子！'
-          : '🌾 QA 農場補給：獲得 1 包 QA 金肥料與草莓種子！',
-      duration: 3500,
-    });
-  }
 }
 
 onMounted(() => {
   reportsStore.fetchReports();
-  farmStore.loadState();
 });
 </script>
 

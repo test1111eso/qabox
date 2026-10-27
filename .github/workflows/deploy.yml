@@ -32,6 +32,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test bingo rules and synchronization
+        run: npm run test:bingo
+
+      - name: Test login feedback
+        run: npm run test:login
+
       - name: Build application
         run: npm run build
 

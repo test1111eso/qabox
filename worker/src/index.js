@@ -1,3 +1,5 @@
+import { cleanupBingo, handleBingo } from './bingo-api.js';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
@@ -255,6 +257,9 @@ function wrapDbWithSafeBind(db) {
 }
 
 export default {
+  async scheduled(_controller, env) {
+    await cleanupBingo(env.DB);
+  },
   async fetch(request, env, ctx) {
     if (env.DB) {
       wrapDbWithSafeBind(env.DB);
@@ -266,6 +271,10 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/api/bingo/')) {
+      return handleBingo(request, env, corsHeaders);
+    }
 
     try {
       // Auth - Register
